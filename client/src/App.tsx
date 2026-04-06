@@ -88,6 +88,10 @@ function App() {
                                           element={<Game />}
                                         />
                                         <Route
+                                          path="/tutorial"
+                                          element={<Game />}
+                                        />
+                                        <Route
                                           path="/practice"
                                           element={<Navigate to="/" replace />}
                                         />
