@@ -26,6 +26,7 @@ import { AchievementsProvider } from "./context/achievements";
 import { TutorialProvider } from "./context/tutorial";
 import { GamesProvider } from "./context/games";
 import { PostHogProvider } from "./context/posthog";
+import { ThemeProvider } from "./context/theme";
 
 const provider = jsonRpcProvider({
   rpc: () => ({ nodeUrl: RPC_URL }),
@@ -54,50 +55,52 @@ function App() {
             explorer={voyager}
             provider={provider}
           >
-            <AudioProvider>
-              <EntitiesProvider>
-                <GamesProvider>
-                  <PracticeProvider>
-                    <QuestsProvider>
-                      <AchievementsProvider>
-                        <WelcomeProvider>
-                          <LoadingProvider>
-                            <Router
-                              future={{
-                                v7_startTransition: true,
-                                v7_relativeSplatPath: true,
-                              }}
-                            >
-                              <TutorialProvider>
-                                <SoundProvider>
-                                  <Layout>
-                                    <Routes>
-                                      <Route path="/" element={<Home />} />
-                                      <Route
-                                        path="/game/:id"
-                                        element={<Game />}
-                                      />
-                                      <Route
-                                        path="/game"
-                                        element={<Navigate to="/" replace />}
-                                      />
-                                      <Route
-                                        path="/practice"
-                                        element={<Game />}
-                                      />
-                                    </Routes>
-                                  </Layout>
-                                </SoundProvider>
-                              </TutorialProvider>
-                            </Router>
-                          </LoadingProvider>
-                        </WelcomeProvider>
-                      </AchievementsProvider>
-                    </QuestsProvider>
-                  </PracticeProvider>
-                </GamesProvider>
-              </EntitiesProvider>
-            </AudioProvider>
+            <ThemeProvider>
+              <AudioProvider>
+                <EntitiesProvider>
+                  <GamesProvider>
+                    <PracticeProvider>
+                      <QuestsProvider>
+                        <AchievementsProvider>
+                          <WelcomeProvider>
+                            <LoadingProvider>
+                              <Router
+                                future={{
+                                  v7_startTransition: true,
+                                  v7_relativeSplatPath: true,
+                                }}
+                              >
+                                <TutorialProvider>
+                                  <SoundProvider>
+                                    <Layout>
+                                      <Routes>
+                                        <Route path="/" element={<Home />} />
+                                        <Route
+                                          path="/game/:id"
+                                          element={<Game />}
+                                        />
+                                        <Route
+                                          path="/game"
+                                          element={<Navigate to="/" replace />}
+                                        />
+                                        <Route
+                                          path="/practice"
+                                          element={<Game />}
+                                        />
+                                      </Routes>
+                                    </Layout>
+                                  </SoundProvider>
+                                </TutorialProvider>
+                              </Router>
+                            </LoadingProvider>
+                          </WelcomeProvider>
+                        </AchievementsProvider>
+                      </QuestsProvider>
+                    </PracticeProvider>
+                  </GamesProvider>
+                </EntitiesProvider>
+              </AudioProvider>
+            </ThemeProvider>
           </StarknetConfig>
         </QueryClientProvider>
       </PostHogProvider>
