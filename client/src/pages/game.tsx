@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { usePreserveSearchNavigate } from "@/lib/router";
 import { GameScene } from "@/components/scenes/game";
 import { PurchaseScene } from "@/components/scenes/purchase";
@@ -30,6 +30,7 @@ import { useTutorial } from "@/context/tutorial";
 import { usePostHog } from "@/context/posthog";
 export const Game = () => {
   const navigate = usePreserveSearchNavigate();
+  const { pathname } = useLocation();
   const {
     data: tutorialData,
     isActive: tutorialActive,
@@ -79,13 +80,14 @@ export const Game = () => {
   );
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [defaultLoading, setDefaultLoading] = useState(!isPracticeMode);
+  const isPracticeRoute = pathname.startsWith("/practice");
 
   const practiceRouteId = useMemo(() => {
-    if (!isPracticeMode) return null;
+    if (!isPracticeRoute) return null;
     return idParam && !Number.isNaN(Number.parseInt(idParam, 10))
       ? Number.parseInt(idParam, 10)
       : null;
-  }, [idParam, isPracticeMode]);
+  }, [idParam, isPracticeRoute]);
 
   // Get game ID from path params (only in blockchain mode)
   const gameId = useMemo(() => {
@@ -106,7 +108,7 @@ export const Game = () => {
 
   // Sync the active practice game from the route.
   useEffect(() => {
-    if (!isPracticeMode) {
+    if (!isPracticeRoute) {
       return;
     }
 
@@ -122,7 +124,7 @@ export const Game = () => {
       }
     }
   }, [
-    isPracticeMode,
+    isPracticeRoute,
     practiceRouteId,
     practiceGame?.id,
     continueGame,
