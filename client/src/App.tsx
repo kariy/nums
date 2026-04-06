@@ -20,7 +20,6 @@ import { Game, Home } from "./pages";
 import { queryClient } from "./queries";
 import { QuestsProvider } from "./context/quests";
 import { LoadingProvider } from "./context/loading";
-import { WelcomeProvider } from "./context/welcome";
 import { Layout } from "./components/layouts";
 import { AchievementsProvider } from "./context/achievements";
 import { TutorialProvider } from "./context/tutorial";
@@ -62,46 +61,44 @@ function App() {
                     <PracticeProvider>
                       <QuestsProvider>
                         <AchievementsProvider>
-                          <WelcomeProvider>
-                            <LoadingProvider>
-                              <Router
-                                future={{
-                                  v7_startTransition: true,
-                                  v7_relativeSplatPath: true,
-                                }}
-                              >
-                                <TutorialProvider>
-                                  <SoundProvider>
-                                    <Layout>
-                                      <Routes>
-                                        <Route path="/" element={<Home />} />
-                                        <Route
-                                          path="/game/:id"
-                                          element={<Game />}
-                                        />
-                                        <Route
-                                          path="/game"
-                                          element={<Navigate to="/" replace />}
-                                        />
-                                        <Route
-                                          path="/practice/:id"
-                                          element={<Game />}
-                                        />
-                                        <Route
-                                          path="/tutorial"
-                                          element={<Game />}
-                                        />
-                                        <Route
-                                          path="/practice"
-                                          element={<Navigate to="/" replace />}
-                                        />
-                                      </Routes>
-                                    </Layout>
-                                  </SoundProvider>
-                                </TutorialProvider>
-                              </Router>
-                            </LoadingProvider>
-                          </WelcomeProvider>
+                          <LoadingProvider>
+                            <Router
+                              future={{
+                                v7_startTransition: true,
+                                v7_relativeSplatPath: true,
+                              }}
+                            >
+                              <TutorialProvider>
+                                <SoundProvider>
+                                  <Layout>
+                                    <Routes>
+                                      <Route path="/" element={<Home />} />
+                                      <Route
+                                        path="/game/:id"
+                                        element={<Game />}
+                                      />
+                                      <Route
+                                        path="/game"
+                                        element={<Navigate to="/" replace />}
+                                      />
+                                      <Route
+                                        path="/practice/:id"
+                                        element={<Game />}
+                                      />
+                                      <Route
+                                        path="/tutorial"
+                                        element={<Game />}
+                                      />
+                                      <Route
+                                        path="/practice"
+                                        element={<Navigate to="/" replace />}
+                                      />
+                                    </Routes>
+                                  </Layout>
+                                </SoundProvider>
+                              </TutorialProvider>
+                            </Router>
+                          </LoadingProvider>
                         </AchievementsProvider>
                       </QuestsProvider>
                     </PracticeProvider>
