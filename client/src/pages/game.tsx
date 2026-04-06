@@ -79,7 +79,6 @@ export const Game = () => {
     null,
   );
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-  const [defaultLoading, setDefaultLoading] = useState(!isPracticeMode);
   const isPracticeRoute = pathname.startsWith("/practice");
 
   const practiceRouteId = useMemo(() => {
@@ -551,14 +550,8 @@ export const Game = () => {
     setShowPurchaseModal(false);
   }, []);
 
-  useEffect(() => {
-    setTimeout(() => {
-      setDefaultLoading(false);
-    }, 2000);
-  }, []);
-
   // Show loading state if game is not loaded
-  if (!game || defaultLoading) return <LoadingScene />;
+  if (!game) return <LoadingScene />;
 
   return (
     <div className="flex items-center justify-center h-full">
