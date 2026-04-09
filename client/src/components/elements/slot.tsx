@@ -14,8 +14,7 @@ import { SlidingNumber } from "@/components/ui/sliding-number";
 import { useAudio } from "@/context/audio";
 
 export interface SlotProps
-  extends
-    React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof slotVariants> {
   label?: number;
   value?: number;

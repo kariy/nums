@@ -5,8 +5,7 @@ import { SlidingNumber } from "@/components/ui/sliding-number";
 import { useAudio } from "@/context/audio";
 
 export interface NumberProps
-  extends
-    React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof numberVariants> {
   value?: number;
   invalid?: boolean;

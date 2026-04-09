@@ -86,8 +86,8 @@ export const GameScene = ({
       style={{ scrollbarWidth: "none", ...style }}
       {...props}
     >
-      <div className="flex-[1] w-full flex items-center">
-        <div className="flex justify-between items-stretch gap-3 md:gap-8 w-full">
+      <div className="flex-[1] w-full flex items-center max-h-[73px] md:max-h-[100px]">
+        <div className="flex justify-between items-stretch gap-3 md:gap-8 w-full h-full">
           <div className="flex justify-between items-center h-full gap-3 md:gap-6">
             <Num id="tutorial-num" value={game.number} invalid={isOver} sound />
             <div className="flex flex-col justify-between items-start h-full gap-2">

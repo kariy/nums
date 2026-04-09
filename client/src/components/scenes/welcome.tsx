@@ -7,8 +7,7 @@ import { useEffect, useState } from "react";
 import { CartridgeIcon, DojoIcon, StarknetIcon } from "@/components/icons";
 
 export interface WelcomeSceneProps
-  extends
-    React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof welcomeSceneVariants> {
   content?: string;
   isDismissing?: boolean;
