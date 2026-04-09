@@ -1,6 +1,7 @@
 packages:
   - "client"
   - "contracts/tokens"
+  - "remotion"
 catalog:
   "@cartridge/connector": "0.13.11-alpha.2"
   "@cartridge/controller": "0.13.11-alpha.2"

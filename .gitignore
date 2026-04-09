@@ -33,6 +33,7 @@ target
 .vercel
 account*.json
 keystore*.json
+torii.db*
 
 # Playwright MCP
 .playwright-mcp
