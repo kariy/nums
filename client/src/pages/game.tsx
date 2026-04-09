@@ -41,6 +41,7 @@ export const Game = () => {
   const { isPracticeMode, set, select, apply, claim } = useActions();
   const { capture } = usePostHog();
   const gameOverFiredRef = useRef<number | null>(null);
+  const gameStartedFiredRef = useRef<number | null>(null);
 
   const { game: practiceGame, start: startPractice } = usePractice();
   const { supply: currentSupply, username } = useHeader();
@@ -121,6 +122,22 @@ export const Game = () => {
       practiceInitializedRef.current = true;
     }
   }, [isPracticeMode, practiceGame, currentSupply, startPractice, multiplier]);
+
+  // Track game_started when a game first becomes available
+  useEffect(() => {
+    if (!game || game.over) return;
+    if (gameStartedFiredRef.current !== game.id) {
+      capture("game_started", {
+        game_id: game.id,
+        mode: isPracticeMode
+          ? window.location.pathname === "/tutorial"
+            ? "tutorial"
+            : "practice"
+          : "real",
+      });
+      gameStartedFiredRef.current = game.id;
+    }
+  }, [game, isPracticeMode, capture]);
 
   // Reset loading states when game model changes (transaction succeeded and data updated)
   useEffect(() => {

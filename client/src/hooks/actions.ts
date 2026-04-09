@@ -311,36 +311,6 @@ export const useActions = () => {
     [isPracticeMode, practiceGame, setGame, account, chain.id, capture, mode],
   );
 
-  const start = useCallback(
-    async (gameId: number, game: any) => {
-      if (isPracticeMode) {
-        if (!practiceGame) return false;
-        try {
-          const rand = new Random(BigInt(Math.floor(Math.random() * 1000000)));
-          GameEngine.start(practiceGame, rand);
-          setGame(practiceGame.clone());
-          capture("game_started", { game_id: gameId, mode });
-          return true;
-        } catch (e) {
-          console.error(e);
-          return false;
-        }
-      }
-
-      try {
-        if (!game) return false;
-        const rand = new Random(BigInt(gameId));
-        GameEngine.start(game, rand);
-        capture("game_started", { game_id: gameId, mode });
-        return true;
-      } catch (e) {
-        console.log({ e });
-        return false;
-      }
-    },
-    [isPracticeMode, practiceGame, setGame, capture, mode],
-  );
-
   const questClaims = useCallback(
     async (
       params: { playerAddress: string; questId: string; intervalId: number }[],
@@ -592,7 +562,6 @@ export const useActions = () => {
 
   return {
     isPracticeMode,
-    start,
     set,
     select,
     apply,
