@@ -4,7 +4,8 @@ import { BundleApi } from "./torii/bundle";
 import { Config } from "./torii/config";
 import { Event } from "./torii/event";
 import { Game } from "./torii/game";
-import { Leaderboard } from "./torii/leaderboard";
+import { LeaderboardScore } from "./torii/leaderboard-score";
+import { LeaderboardReferral } from "./torii/leaderboard-referral";
 import { Merkledrop } from "./torii/merkledrop";
 import { Owner } from "./torii/owner";
 import { Quest } from "./torii/quest";
@@ -25,7 +26,8 @@ export const queryKeys = {
   vault: Vault.keys,
 
   owner: Owner.keys,
-  leaderboard: Leaderboard.keys,
+  leaderboardScore: LeaderboardScore.keys,
+  leaderboardReferrals: LeaderboardReferral.keys,
   activities: Activities.keys,
   referrals: Referral.keys,
 

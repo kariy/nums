@@ -1,18 +1,18 @@
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import {
-  LeaderboardRow,
-  type LeaderboardRowProps,
-} from "@/components/elements/leaderboard-row";
+  LeaderboardReferralRow,
+  type LeaderboardReferralRowProps,
+} from "@/components/elements/leaderboard-referral-row";
 
-export interface LeaderboardProps
+export interface LeaderboardReferralProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof leaderboardVariants> {
-  rows: LeaderboardRowProps[];
+    VariantProps<typeof leaderboardReferralVariants> {
+  rows: LeaderboardReferralRowProps[];
   currentUserAddress?: string;
 }
 
-const leaderboardVariants = cva(
+const leaderboardReferralVariants = cva(
   "select-none overflow-hidden h-full w-full flex flex-col gap-6",
   {
     variants: {
@@ -26,15 +26,18 @@ const leaderboardVariants = cva(
   },
 );
 
-export const Leaderboard = ({
+export const LeaderboardReferral = ({
   rows,
   currentUserAddress,
   variant,
   className,
   ...props
-}: LeaderboardProps) => {
+}: LeaderboardReferralProps) => {
   return (
-    <div className={cn(leaderboardVariants({ variant, className }))} {...props}>
+    <div
+      className={cn(leaderboardReferralVariants({ variant, className }))}
+      {...props}
+    >
       {/* Headers */}
       <div className="flex items-center gap-4 h-3 px-4">
         <div className="flex-1 text-left">
@@ -55,7 +58,7 @@ export const Leaderboard = ({
               textShadow: "2px 2px 0px rgba(0, 0, 0, 0.25)",
             }}
           >
-            Player
+            Referrer
           </span>
         </div>
         <div className="flex-[2] text-left">
@@ -65,8 +68,7 @@ export const Leaderboard = ({
               textShadow: "2px 2px 0px rgba(0, 0, 0, 0.25)",
             }}
           >
-            <span className="hidden md:inline">Total Games</span>
-            <span className="inline md:hidden">Games</span>
+            Players
           </span>
         </div>
         <div className="flex-[2] text-left">
@@ -76,8 +78,7 @@ export const Leaderboard = ({
               textShadow: "2px 2px 0px rgba(0, 0, 0, 0.25)",
             }}
           >
-            <span className="hidden md:inline">Total Nums</span>
-            <span className="inline md:hidden">Nums</span>
+            Earned
           </span>
         </div>
       </div>
@@ -91,7 +92,7 @@ export const Leaderboard = ({
               textShadow: "2px 2px 0px rgba(0, 0, 0, 0.25)",
             }}
           >
-            No games have been played yet
+            No referrals have been made yet
           </p>
         </div>
       ) : (
@@ -100,7 +101,7 @@ export const Leaderboard = ({
           style={{ scrollbarWidth: "none" }}
         >
           {rows.map((row, index) => (
-            <LeaderboardRow key={index} {...row} />
+            <LeaderboardReferralRow key={index} {...row} />
           ))}
         </div>
       )}

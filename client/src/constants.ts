@@ -12,4 +12,4 @@ export const BASE_MULTIPLIER = 100;
 /** Matches rewarder.cairo MULTIPLIER_PRECISION (1_000_000). Multiplier scale: 1× = 1_000_000 */
 export const MULTIPLIER_PRECISION = 1_000_000n;
 export const REFERRAL_FEE = 0.05;
-export const PROTOCOL_FEE = 0.05;
+export const PROTOCOL_FEE = 0.0;

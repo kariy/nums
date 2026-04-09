@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Leaderboard } from "./leaderboard";
+import { LeaderboardScore } from "./leaderboard-score";
 
 const meta = {
-  title: "Containers/Leaderboard",
-  component: Leaderboard,
+  title: "Containers/Leaderboard Score",
+  component: LeaderboardScore,
   parameters: {
     layout: "padded",
   },
@@ -19,7 +19,7 @@ const meta = {
       value: "dark",
     },
   },
-} satisfies Meta<typeof Leaderboard>;
+} satisfies Meta<typeof LeaderboardScore>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

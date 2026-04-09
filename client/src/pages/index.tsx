@@ -21,6 +21,7 @@ import { useStaking } from "@/hooks/staking";
 import { useVault } from "@/context/vault";
 import { useMultiplier } from "@/hooks/multiplier";
 import { useLeaderboard } from "@/hooks/leaderboard";
+import { useLeaderboardReferral } from "@/hooks/leaderboard-referral";
 import { useQuestScene } from "@/hooks/quests";
 import { useAchievementScene } from "@/hooks/achievements";
 import { usePrices } from "@/context/prices";
@@ -76,6 +77,8 @@ export const Main = ({ children }: MainProps) => {
   const questsProps = useQuestScene();
   const { data: leaderboardData, refetch: refetchLeaderboard } =
     useLeaderboard();
+  const { data: leaderboardReferralData, refetch: refetchLeaderboardReferral } =
+    useLeaderboardReferral();
   const { config, claimeds, starteds } = useEntities();
   const { paidBundles: bundles } = useBundles();
   const { getNumsPrice } = usePrices();
@@ -333,8 +336,9 @@ export const Main = ({ children }: MainProps) => {
   useEffect(() => {
     if (showLeaderboardScene) {
       refetchLeaderboard();
+      refetchLeaderboardReferral();
     }
-  }, [showLeaderboardScene, refetchLeaderboard]);
+  }, [showLeaderboardScene, refetchLeaderboard, refetchLeaderboardReferral]);
 
   // Refetch referral data when modal opens
   useEffect(() => {
@@ -526,6 +530,7 @@ export const Main = ({ children }: MainProps) => {
             <div className="absolute inset-0 z-50 m-2 md:m-6 flex-1">
               <LeaderboardScene
                 rows={leaderboardData ?? []}
+                referralRows={leaderboardReferralData ?? []}
                 currentUserAddress={account?.address}
                 onClose={() => setShowLeaderboardScene(false)}
                 className="h-full"
