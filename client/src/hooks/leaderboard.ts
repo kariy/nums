@@ -1,20 +1,21 @@
 import { queryKeys } from "@/api/keys";
-import { Leaderboard, type LeaderboardRow } from "@/api/torii/leaderboard";
+import {
+  LeaderboardScore,
+  type LeaderboardScoreRow,
+} from "@/api/torii/leaderboard-score";
 import { useQuery } from "@tanstack/react-query";
 
-export type LeaderboardRowData = LeaderboardRow;
-
-export type RangeType = "1D" | "1W" | "All";
+export type LeaderboardScoreRowData = LeaderboardScoreRow;
 
 export const useLeaderboard = (): {
-  data: LeaderboardRowData[] | undefined;
+  data: LeaderboardScoreRowData[] | undefined;
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
 } => {
-  const query = useQuery<LeaderboardRowData[]>({
-    queryKey: queryKeys.leaderboard(),
-    queryFn: Leaderboard.fetch,
+  const query = useQuery<LeaderboardScoreRowData[]>({
+    queryKey: queryKeys.leaderboardScore(),
+    queryFn: LeaderboardScore.fetch,
     enabled: false,
     staleTime: 0,
     gcTime: 1000 * 60 * 10,

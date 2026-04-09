@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { ShadowEffect } from "@/components/icons";
 import { LeaderboardScore } from "@/components/containers/leaderboard-score";
 import { LeaderboardReferral } from "@/components/containers/leaderboard-referral";
-import type { LeaderboardRowData } from "@/hooks/leaderboard";
+import type { LeaderboardScoreRowData } from "@/hooks/leaderboard";
 import type { LeaderboardReferralRowData } from "@/hooks/leaderboard-referral";
 import {
   LeaderboardTabs,
@@ -17,7 +17,7 @@ import { useId, useMemo, useState } from "react";
 export interface LeaderboardSceneProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof leaderboardSceneVariants> {
-  rows: LeaderboardRowData[];
+  rows: LeaderboardScoreRowData[];
   referralRows: LeaderboardReferralRowData[];
   currentUserAddress?: string;
   onClose?: () => void;

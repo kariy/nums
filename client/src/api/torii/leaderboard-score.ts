@@ -1,13 +1,13 @@
 import { initGrpcClient } from "./client";
 
-export interface LeaderboardRow {
+export interface LeaderboardScoreRow {
   username: string;
   player: string;
   games_played: number;
   total_reward: number;
 }
 
-async function fetch(): Promise<LeaderboardRow[]> {
+async function fetch(): Promise<LeaderboardScoreRow[]> {
   const client = initGrpcClient();
   const query = `SELECT 
     c.username,
@@ -29,7 +29,7 @@ ORDER BY total_reward DESC`;
   }));
 }
 
-export const Leaderboard = {
-  keys: () => ["leaderboard"] as const,
+export const LeaderboardScore = {
+  keys: () => ["leaderboard-score"] as const,
   fetch,
 };

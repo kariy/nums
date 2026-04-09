@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { LeaderboardScene } from "./leaderboard";
 import { fn } from "storybook/test";
-import type { LeaderboardRowData } from "@/hooks/leaderboard";
+import type { LeaderboardScoreRowData } from "@/hooks/leaderboard";
 import type { LeaderboardReferralRowData } from "@/hooks/leaderboard-referral";
 
 const meta = {
@@ -27,7 +27,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const sampleRows: LeaderboardRowData[] = [
+const sampleRows: LeaderboardScoreRowData[] = [
   {
     username: "clicksave",
     player:
