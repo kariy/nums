@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import SlotCounter from "react-slot-counter";
+import { motion, AnimatePresence } from "framer-motion";
 import background from "/assets/numbers.svg";
 import { Countup } from "@/components/animations";
 import { useEffect, useState } from "react";
 import { CartridgeIcon, DojoIcon, StarknetIcon } from "@/components/icons";
 
 export interface WelcomeSceneProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof welcomeSceneVariants> {
   content?: string;
   isDismissing?: boolean;
@@ -112,32 +113,26 @@ export const WelcomeScene = ({
             className="text-[80px]/[54px] md:text-[160px]/[109px] translate-y-2 overflow-clip"
             style={{ textShadow: "2px 2px 0px rgba(0, 0, 0, 0.24)" }}
           >
-            <SlotCounter
-              value={slotValue}
-              duration={3}
-              dummyCharacters={[
-                "N",
-                "U",
-                "M",
-                "S",
-                ".",
-                "G",
-                "G",
-                "0",
-                "1",
-                "2",
-                "3",
-                "4",
-                "5",
-                "6",
-                "7",
-                "8",
-                "9",
-              ]}
-              separatorCharacters={[]}
-              animateOnVisible={false}
-              useMonospaceWidth={false}
-            />
+            <AnimatePresence>
+              {slotValue.trim() &&
+                slotValue.split("").map((char, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ opacity: 0, y: "0.5em" }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 50,
+                      damping: 12,
+                      mass: 0.5,
+                      delay: i * 0.35,
+                    }}
+                    style={{ display: "inline-block" }}
+                  >
+                    {char}
+                  </motion.span>
+                ))}
+            </AnimatePresence>
           </div>
           <p className="flex items-center justify-center gap-3 uppercase overflow-hidden">
             <strong

@@ -10,11 +10,12 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import SlotCounter from "react-slot-counter";
+import { SlidingNumber } from "@/components/ui/sliding-number";
 import { useAudio } from "@/context/audio";
 
 export interface SlotProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof slotVariants> {
   label?: number;
   value?: number;
@@ -229,7 +230,7 @@ export const Slot = ({
         <div
           ref={slotCounterRef}
           className={cn(
-            "text-lg/5 font-secondary tracking-wide font-medium",
+            "text-lg/8 font-secondary tracking-wide font-medium",
             highlight && !invalid && !!value && "text-green-100",
             invalid && !!value && "text-red-100",
           )}
@@ -237,14 +238,15 @@ export const Slot = ({
             textShadow: "2px 2px 0px rgba(0, 0, 0, 0.24)",
           }}
         >
-          <SlotCounter
-            value={value ? value.toString() : "Set"}
-            startValueOnce={false}
-            duration={0.6}
-            dummyCharacters={"0123456789Set".split("")}
-            animateOnVisible={false}
-            useMonospaceWidth={true}
-          />
+          {value ? (
+            <SlidingNumber
+              number={value}
+              leading="inherit"
+              transition={{ stiffness: 300, damping: 22, mass: 0.4 }}
+            />
+          ) : (
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>Set</span>
+          )}
         </div>
       </Button>
     </div>

@@ -1,10 +1,12 @@
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import SlotCounter from "react-slot-counter";
+import { SlidingNumber } from "@/components/ui/sliding-number";
 import { useAudio } from "@/context/audio";
 
 export interface NumberProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof numberVariants> {
   value?: number;
   invalid?: boolean;
@@ -38,6 +40,15 @@ export const Num = ({
   ...props
 }: NumberProps) => {
   const { playSlots } = useAudio();
+  const prevValueRef = useRef(value);
+
+  useEffect(() => {
+    if (!sound) return;
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
+      playSlots();
+    }
+  }, [value, sound, playSlots]);
 
   return (
     <div
@@ -50,15 +61,20 @@ export const Num = ({
       {...props}
     >
       <div className="overflow-clip h-full">
-        <SlotCounter
-          value={!value ? "???" : value.toString().padStart(3, "0")}
-          startValueOnce
-          duration={1.5}
-          dummyCharacters={"0123456789".split("")}
-          animateOnVisible={false}
-          useMonospaceWidth
-          onAnimationStart={sound ? playSlots : undefined}
-        />
+        {!value ? (
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>???</span>
+        ) : (
+          <SlidingNumber
+            className={
+              variant === "secondary"
+                ? "[&_[data-slot=sliding-number-roller]]:leading-[38px] md:[&_[data-slot=sliding-number-roller]]:leading-[60px]"
+                : "[&_[data-slot=sliding-number-roller]]:leading-[65px] md:[&_[data-slot=sliding-number-roller]]:leading-[92px]"
+            }
+            number={value}
+            padStart={3}
+            transition={{ stiffness: 60, damping: 12, mass: 0.8 }}
+          />
+        )}
       </div>
     </div>
   );

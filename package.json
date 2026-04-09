@@ -21,7 +21,11 @@
     "storybook:serve": "cd client && pnpm storybook:build --quiet && pnpm http-server -c-1 storybook-static --port 6001 --silent",
     "build-storybook": "cd client && pnpm build-storybook",
     "docs:serve": "vocs dev",
-    "docs:build": "vocs build"
+    "docs:build": "vocs build",
+    "remotion:studio": "cd remotion && pnpm studio",
+    "remotion:render": "cd remotion && npx remotion render src/index.ts replay out/game-replay.mp4",
+    "remotion:render:game": "cd remotion && npx remotion render src/index.ts replay out/game-replay.mp4 --props",
+    "remotion:still": "cd remotion && npx remotion still src/index.ts replay out/frame.png"
   },
   "dependencies": {
     "@bal7hazar/arcade-sdk": "^0.0.74",
