@@ -20,6 +20,7 @@ historical = [
   "NUMS-TrophyProgression",
   "NUMS-QuestProgression",
   "NUMS-BundleIssued",
+  "NUMS-Game",
 ]
 
 [erc]
