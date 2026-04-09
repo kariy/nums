@@ -1,17 +1,24 @@
 import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import { ShadowEffect } from "@/components/icons";
-import { Leaderboard } from "@/components/containers/leaderboard";
+import { LeaderboardScore } from "@/components/containers/leaderboard-score";
+import { LeaderboardReferral } from "@/components/containers/leaderboard-referral";
 import type { LeaderboardRowData } from "@/hooks/leaderboard";
-import { Ranges, type RangeType } from "@/components/elements/ranges";
+import type { LeaderboardReferralRowData } from "@/hooks/leaderboard-referral";
+import {
+  LeaderboardTabs,
+  type LeaderboardTabType,
+} from "@/components/elements/leaderboard-tabs";
 import { Close } from "@/components/elements";
 import type { LeaderboardRowProps } from "../elements";
+import type { LeaderboardReferralRowProps } from "@/components/elements/leaderboard-referral-row";
 import { useId, useMemo, useState } from "react";
 
 export interface LeaderboardSceneProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof leaderboardSceneVariants> {
   rows: LeaderboardRowData[];
+  referralRows: LeaderboardReferralRowData[];
   currentUserAddress?: string;
   onClose?: () => void;
 }
@@ -33,6 +40,7 @@ const leaderboardSceneVariants = cva(
 
 export const LeaderboardScene = ({
   rows,
+  referralRows,
   currentUserAddress,
   onClose,
   variant,
@@ -40,63 +48,68 @@ export const LeaderboardScene = ({
   ...props
 }: LeaderboardSceneProps) => {
   const filterId = useId();
-  const [range, setRange] = useState<RangeType>("All");
+  const [tab, setTab] = useState<LeaderboardTabType>("Nums");
 
-  // Transform and filter rows based on range
   const transformedRows = useMemo(() => {
-    // Transform data to LeaderboardRowProps with variant based on current user
     const transformed = rows.map((row) => {
       const isCurrentUser =
         BigInt(row.player) === BigInt(currentUserAddress ?? "0x0");
 
-      // Select the appropriate fields based on range
-      let total: number;
-      let totalReward: number;
-
-      switch (range) {
-        case "1D":
-          total = row.games_played_day ?? 0;
-          totalReward = row.total_reward_day ?? 0;
-          break;
-        case "1W":
-          total = row.games_played_week ?? 0;
-          totalReward = row.total_reward_week ?? 0;
-          break;
-        default:
-          total = row.games_played;
-          totalReward = row.total_reward;
-          break;
-      }
-
       return {
         username: row.username,
-        total,
-        totalReward,
+        total: row.games_played,
+        totalReward: row.total_reward,
         variant: (isCurrentUser ? "primary" : "default") as
           | "primary"
           | "default",
       };
     });
 
-    // Filter out rows with 0 games for day/week ranges and sort by total reward
-    const filtered =
-      range === "All"
-        ? transformed
-        : transformed
-            .filter((row) => row.total > 0)
-            .sort((a, b) => b.totalReward - a.totalReward);
-
-    // Add rank and sort by total reward for All range (default)
-    const sorted =
-      range === "All"
-        ? filtered.sort((a, b) => b.totalReward - a.totalReward)
-        : filtered;
+    const sorted = transformed.sort((a, b) => b.totalReward - a.totalReward);
 
     return sorted.map((row, index) => ({
       ...row,
       rank: index + 1,
     })) satisfies LeaderboardRowProps[];
-  }, [rows, range, currentUserAddress]);
+  }, [rows, currentUserAddress]);
+
+  const transformedReferralRows = useMemo(() => {
+    const transformed = referralRows.map((row) => {
+      const isCurrentUser =
+        !!row.address &&
+        !!currentUserAddress &&
+        BigInt(row.address) === BigInt(currentUserAddress);
+
+      return {
+        username: row.username,
+        players: row.players,
+        earned: row.earned,
+        variant: (isCurrentUser ? "primary" : "default") as
+          | "primary"
+          | "default",
+      };
+    });
+
+    const sorted = transformed.sort((a, b) => b.earned - a.earned);
+
+    return sorted.map((row, index) => ({
+      ...row,
+      rank: index + 1,
+    })) satisfies LeaderboardReferralRowProps[];
+  }, [referralRows, currentUserAddress]);
+
+  const renderLeaderboard = () =>
+    tab === "Nums" ? (
+      <LeaderboardScore
+        rows={transformedRows}
+        currentUserAddress={currentUserAddress}
+      />
+    ) : (
+      <LeaderboardReferral
+        rows={transformedReferralRows}
+        currentUserAddress={currentUserAddress}
+      />
+    );
 
   return (
     <div
@@ -119,11 +132,12 @@ export const LeaderboardScene = ({
             </div>
           )}
         </div>
-        <Ranges value={range} onValueChange={setRange} className="w-full" />
-        <Leaderboard
-          rows={transformedRows}
-          currentUserAddress={currentUserAddress}
+        <LeaderboardTabs
+          value={tab}
+          onValueChange={setTab}
+          className="w-full"
         />
+        {renderLeaderboard()}
       </div>
 
       {/* Desktop */}
@@ -139,12 +153,9 @@ export const LeaderboardScene = ({
         <div className="h-full w-full max-w-[720px] self-center overflow-hidden flex flex-col gap-6 md:gap-8">
           <div className="flex items-center justify-between">
             <Title />
-            <Ranges value={range} onValueChange={setRange} />
+            <LeaderboardTabs value={tab} onValueChange={setTab} />
           </div>
-          <Leaderboard
-            rows={transformedRows}
-            currentUserAddress={currentUserAddress}
-          />
+          {renderLeaderboard()}
         </div>
       </div>
     </div>

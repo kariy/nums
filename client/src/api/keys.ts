@@ -5,6 +5,7 @@ import { Config } from "./torii/config";
 import { Event } from "./torii/event";
 import { Game } from "./torii/game";
 import { Leaderboard } from "./torii/leaderboard";
+import { LeaderboardReferral } from "./torii/leaderboard-referral";
 import { Merkledrop } from "./torii/merkledrop";
 import { Owner } from "./torii/owner";
 import { Quest } from "./torii/quest";
@@ -26,6 +27,7 @@ export const queryKeys = {
 
   owner: Owner.keys,
   leaderboard: Leaderboard.keys,
+  leaderboardReferrals: LeaderboardReferral.keys,
   activities: Activities.keys,
   referrals: Referral.keys,
 

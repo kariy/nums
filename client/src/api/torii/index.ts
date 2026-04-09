@@ -6,6 +6,7 @@ export * from "./config";
 export * from "./event";
 export * from "./game";
 export * from "./leaderboard";
+export * from "./leaderboard-referral";
 export * from "./max-share";
 export * from "./merkledrop";
 export * from "./owner";
