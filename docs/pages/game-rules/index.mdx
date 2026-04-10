@@ -7,35 +7,63 @@ The game is a skill-based number placement game. Players place 18 numbers (betwe
 <div className="docs-flow">
   <div className="docs-flow__step">
     <span className="docs-flow__num">1</span>
-    <div className="docs-flow__content">Players can select from several entry bundles, which offer a progressively lower cost per game when purchasing up to 10 entries at a time</div>
+    <div className="docs-flow__content">
+      Players can select from several entry bundles, which offer a progressively
+      lower cost per game when purchasing up to 10 entries at a time
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">2</span>
-    <div className="docs-flow__content">The system draws 18 unique numbers one at a time between <strong>1</strong> and <strong>999</strong></div>
+    <div className="docs-flow__content">
+      The system draws 18 unique numbers one at a time between{" "}
+      <strong>1</strong> and <strong>999</strong>
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">3</span>
-    <div className="docs-flow__content">The player always sees the <strong>current number</strong> to place and the <strong>upcoming number</strong> (peek)</div>
+    <div className="docs-flow__content">
+      The player always sees the <strong>current number</strong> to place and
+      the <strong>upcoming number</strong> (peek)
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">4</span>
-    <div className="docs-flow__content">The player strategically places the current number into an available slot. They can reshape their fate by using <strong>power-ups</strong> and navigating <strong>traps</strong></div>
+    <div className="docs-flow__content">
+      The player strategically places the current number into an available slot.
+      They can reshape their fate by using <strong>power-ups</strong> and
+      navigating <strong>traps</strong>
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">5</span>
-    <div className="docs-flow__content">Once placed, a number cannot be moved. Players unlock power-ups by successfully filling designated milestone slots on the board. These power-ups are banked for later use, and deciding exactly when to deploy them is a key part of the strategy</div>
+    <div className="docs-flow__content">
+      Once placed, a number cannot be moved. Players unlock power-ups by
+      successfully filling designated milestone slots on the board. These
+      power-ups are banked for later use, and deciding exactly when to deploy
+      them is a key part of the strategy
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">6</span>
-    <div className="docs-flow__content">All placed numbers must stay in ascending order from left to right. Two equal numbers can be placed consecutively</div>
+    <div className="docs-flow__content">
+      All placed numbers must stay in ascending order from left to right. Two
+      equal numbers can be placed consecutively
+    </div>
   </div>
   <div className="docs-flow__step">
     <span className="docs-flow__num">7</span>
-    <div className="docs-flow__content">Complete the game and <strong>claim your rewards</strong></div>
+    <div className="docs-flow__content">
+      Complete the game and <strong>claim your rewards</strong>
+    </div>
   </div>
 </div>
 
-<p><em>Skill matters: your placement choices, power-up timing, and trap management drive your results.</em></p>
+<p>
+  <em>
+    Skill matters: your placement choices, power-up timing, and trap management
+    drive your results.
+  </em>
+</p>
 
 ## Win conditions
 
@@ -45,5 +73,10 @@ Even if the game ends before completion, you can earn **partial rewards** based 
 
 ## Lose conditions
 
-The game ends when the current number cannot be placed anywhere without breaking the ascending order, and you have no power-ups left to use.
+The game ends when **all** of the following are true:
 
+- The current number cannot be placed anywhere without breaking the ascending order
+- You have no power-ups available to use
+- No power-up draw is pending
+
+If you reach a power-up milestone (level 6 or 12) on the same turn the board would otherwise be blocked, you are offered a power-up draw **before** the game checks for a loss. This gives you a last chance to pick and use a power-up to save your run.
