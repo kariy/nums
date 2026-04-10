@@ -116,6 +116,7 @@ export default defineConfig({
         { text: "Randomness", link: "/game-rules/randomness" },
       ],
     },
+    { text: "Release Notes", link: "/release-notes" },
     { text: "Token", link: "/token" },
     {
       text: "Governance",
