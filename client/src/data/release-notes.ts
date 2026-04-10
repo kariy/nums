@@ -21,7 +21,7 @@ export const RELEASE_NOTES: ReleaseNoteEntry[] = [
       {
         title: "Features",
         items: [
-          "Added an in-game release notes modal that appears on new updates so you never miss what changed.",
+          "Changed lose conditions on power-up draw stages \u2014 you can no longer lose on a stage where you draw a power-up.",
         ],
       },
     ],
