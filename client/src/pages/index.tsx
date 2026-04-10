@@ -35,7 +35,9 @@ import { useWelcome } from "@/context/welcome";
 import { MediaButton, MediaContent, Toaster } from "@/components/elements";
 import { Settings } from "@/components/containers/settings";
 import { Tos } from "@/components/containers/tos";
+import { ReleaseNotes } from "@/components/containers/release-notes";
 import { useTos } from "@/hooks/tos";
+import { useReleaseNotes } from "@/hooks/release-notes";
 import { Events } from "@/components/containers/events";
 import { WelcomeScene } from "@/components/scenes";
 import { useAudio } from "@/context/audio";
@@ -70,6 +72,8 @@ export const Main = ({ children }: MainProps) => {
   const [initialPathname] = useState(() => pathname);
   const { isDismissed, isDismissing, dismiss } = useWelcome();
   const { accepted: tosAccepted, accept: acceptTos } = useTos();
+  const { seen: releaseNotesSeen, acknowledge: acknowledgeReleaseNotes } =
+    useReleaseNotes();
   const { account, connector } = useAccount();
   const { find, loading } = useControllers();
   const headerData = useHeader();
@@ -695,6 +699,17 @@ export const Main = ({ children }: MainProps) => {
           <div className="absolute inset-0 z-50 flex-1 bg-black-700 backdrop-blur-[4px]">
             <div className="absolute inset-0 z-50 m-2 md:m-6 flex-1 flex items-center justify-center">
               <Tos onAccept={acceptTos} className="h-full md:max-w-[768px]" />
+            </div>
+          </div>
+        )}
+
+        {tosAccepted && !releaseNotesSeen && isDismissed && (
+          <div className="absolute inset-0 z-50 flex-1 bg-black-700 backdrop-blur-[4px]">
+            <div className="absolute inset-0 z-50 m-2 md:m-6 flex-1 flex items-center justify-center">
+              <ReleaseNotes
+                onAcknowledge={acknowledgeReleaseNotes}
+                className="h-full md:max-w-[768px]"
+              />
             </div>
           </div>
         )}
