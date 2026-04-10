@@ -13,7 +13,7 @@ export interface ReferralPaymentsProps
 }
 
 const referralPaymentsVariants = cva(
-  "select-none w-full flex flex-col rounded-xl p-4 pb-0 gap-3 overflow-y-auto",
+  "select-none w-full flex flex-col rounded-xl p-4 gap-3 overflow-y-auto",
   {
     variants: {
       variant: {
