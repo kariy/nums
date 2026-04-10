@@ -263,7 +263,7 @@ export const Replay: React.FC<ReplayProps> = ({
             "linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, rgba(0, 0, 0, 0.12) 100%)",
         }}
       >
-        <MotionConfig reducedMotion={isRendering ? "always" : "never"}>
+        <MotionConfig reducedMotion={"always"}>
           {isIntro && (
             <WelcomeScene close={() => {}} className="w-full h-full" />
           )}
