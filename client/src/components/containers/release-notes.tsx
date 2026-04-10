@@ -28,18 +28,15 @@ const releaseNotesVariants = cva(
   },
 );
 
-function Section({ title, content, items }: ReleaseNoteSection) {
+function Section({ title, items }: ReleaseNoteSection) {
   return (
     <div className="flex flex-col gap-1.5">
       <h4 className="text-lg/5 font-semibold">{title}</h4>
-      {content && <p>{content}</p>}
-      {items && items.length > 0 && (
-        <ul className="list-disc pl-5 flex flex-col gap-1">
-          {items.map((item, i) => (
-            <li key={i}>{item}</li>
-          ))}
-        </ul>
-      )}
+      <ul className="list-disc pl-5 flex flex-col gap-1">
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

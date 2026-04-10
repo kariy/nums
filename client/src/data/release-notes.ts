@@ -1,7 +1,6 @@
 export interface ReleaseNoteSection {
   title: string;
-  content?: string;
-  items?: string[];
+  items: string[];
 }
 
 export interface ReleaseNoteEntry {
@@ -13,16 +12,28 @@ export interface ReleaseNoteEntry {
  * Bump this value whenever new release notes are added.
  * The modal will re-appear for users who haven't seen this version yet.
  */
-export const RELEASE_NOTES_VERSION = "2026-04-09";
+export const RELEASE_NOTES_VERSION = "2026-04-10";
 
 export const RELEASE_NOTES: ReleaseNoteEntry[] = [
+  {
+    date: "April 10, 2026",
+    sections: [
+      {
+        title: "Features",
+        items: [
+          "Added an in-game release notes modal that appears on new updates so you never miss what changed.",
+        ],
+      },
+    ],
+  },
   {
     date: "April 9, 2026",
     sections: [
       {
-        title: "Referral Leaderboard",
-        content:
-          "A new tabbed leaderboard lets you switch between Nums (score ranking) and Referrals (referral ranking). Track your referral performance alongside your game scores.",
+        title: "Features",
+        items: [
+          "A new tabbed leaderboard lets you switch between Nums (score ranking) and Referrals (referral ranking).",
+        ],
       },
       {
         title: "Bug Fixes",
@@ -36,9 +47,10 @@ export const RELEASE_NOTES: ReleaseNoteEntry[] = [
     date: "April 3, 2026",
     sections: [
       {
-        title: "Power-Up Draw Stages Rebalanced",
-        content:
+        title: "Features",
+        items: [
           "Power-up draws now occur at levels 6 and 12 (previously 4, 8, 12). This reduces the total number of draws from 3 to 2 but spaces them out more evenly across the game.",
+        ],
       },
     ],
   },
@@ -59,9 +71,10 @@ export const RELEASE_NOTES: ReleaseNoteEntry[] = [
     date: "April 1, 2026",
     sections: [
       {
-        title: "Events Clickable",
-        content:
+        title: "Features",
+        items: [
           "Events in the activity feed are now clickable links for easier navigation.",
+        ],
       },
       {
         title: "Bug Fixes",
@@ -78,9 +91,10 @@ export const RELEASE_NOTES: ReleaseNoteEntry[] = [
     date: "March 31, 2026",
     sections: [
       {
-        title: "Stage Unlocked State",
-        content:
+        title: "Features",
+        items: [
           "The Stage component now shows an unlocked visual state, making it clearer which stages you have reached.",
+        ],
       },
       {
         title: "Bug Fixes",
