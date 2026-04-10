@@ -740,6 +740,15 @@ export class Game {
       cloneSlots.push(this.number);
       this.next_number = this.next(cloneSlots, rand);
     }
+    // [Effect] Draw new powers if possible
+    if (this.isDrawable()) {
+      if (this._powerDrawQueue && this._powerDrawQueue.length > 0) {
+        this.selectable_powers = this._powerDrawQueue.shift()!;
+      } else {
+        const powerIndexes = Power.draw(rand.nextSeed(), DEFAULT_DRAW_COUNT);
+        this.selectable_powers = powerIndexes.map((index) => Power.from(index));
+      }
+    }
     // [Effect] Assess game over
     // [Info] Game is over if:
     // - number cannot be placed
@@ -749,15 +758,6 @@ export class Game {
       // For practice mode, we use a mock timestamp
       const mockTimestamp = Math.floor(Date.now() / 1000);
       this.over = mockTimestamp;
-    }
-    // [Effect] Draw new powers if possible
-    if (this.over === 0 && this.isDrawable()) {
-      if (this._powerDrawQueue && this._powerDrawQueue.length > 0) {
-        this.selectable_powers = this._powerDrawQueue.shift()!;
-      } else {
-        const powerIndexes = Power.draw(rand.nextSeed(), DEFAULT_DRAW_COUNT);
-        this.selectable_powers = powerIndexes.map((index) => Power.from(index));
-      }
     }
   }
 
