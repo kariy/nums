@@ -28,3 +28,4 @@ export * from "./tutorial-anchor-portal";
 export * from "./achievements";
 export * from "./airdrop";
 export * from "./tos";
+export * from "./release-notes";
