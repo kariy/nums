@@ -4,6 +4,7 @@ import { POC_SNAPSHOTS } from "./fixtures";
 import { frameStore } from "./frame-store";
 import { installHyperframesProtocol } from "./hf-protocol";
 import { fetchGameReplay } from "./data/torii";
+import { loadFonts } from "./fonts";
 import type { GameSnapshot } from "./types";
 import "./styles.css";
 
@@ -28,6 +29,7 @@ async function loadSnapshots(gameId: number | null): Promise<GameSnapshot[]> {
 
 async function bootstrap() {
   const { gameId, numsPrice } = readParams();
+  await loadFonts();
   const snapshots = await loadSnapshots(gameId);
   const totalFrames =
     INTRO_FRAMES + snapshots.length * FRAMES_PER_STATE + OUTRO_FRAMES;
