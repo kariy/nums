@@ -14,7 +14,6 @@ import {
   getCompositionDuration,
   parseAudioElements,
   processCompositionAudio,
-  muxVideoWithAudio,
 } from "@hyperframes/engine";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,7 +76,7 @@ QS.set("numsPrice", String(CLI.numsPrice));
 const VITE_URL = `http://${VITE_HOST}:${VITE_PORT}/?${QS.toString()}`;
 const FRAMES_DIR = path.resolve(ROOT, "out", "frames");
 const VIDEO_ONLY_MP4 = path.resolve(ROOT, "out", "video-only.mp4");
-const AUDIO_WAV = path.resolve(ROOT, "out", "audio.wav");
+const AUDIO_OUT = path.resolve(ROOT, "out", "audio.m4a");
 const AUDIO_WORK = path.resolve(ROOT, "out", "audio-work");
 const OUTPUT_MP4 = path.resolve(ROOT, "out", "game-replay.mp4");
 
@@ -126,7 +125,7 @@ async function main() {
 
   try {
     await waitForUrl(VITE_URL);
-    console.log(`[poc] Vite ready.`);
+    console.log(`[render] Vite ready.`);
 
     const chromeArgs = buildChromeArgs({
       width: WIDTH,
@@ -134,11 +133,11 @@ async function main() {
       captureMode: "beginframe",
     });
 
-    console.log(`[poc] Acquiring headless browser...`);
+    console.log(`[render] Acquiring headless browser...`);
     const acquired = await acquireBrowser(chromeArgs);
 
     try {
-      console.log(`[poc] Creating capture session...`);
+      console.log(`[render] Creating capture session...`);
       const session = await createCaptureSession(VITE_URL, FRAMES_DIR, {
         width: WIDTH,
         height: HEIGHT,
@@ -176,7 +175,7 @@ async function main() {
       await releaseBrowser(acquired.browser);
     }
 
-    console.log(`[poc] Encoding video (no audio) with ffmpeg...`);
+    console.log(`[render] Encoding video (no audio) with ffmpeg...`);
     await runFfmpeg([
       "-y",
       "-framerate",
@@ -196,31 +195,41 @@ async function main() {
 
     if (pageHtml) {
       const audioElements = parseAudioElements(pageHtml);
-      console.log(`[poc] Found ${audioElements.length} audio elements.`);
+      console.log(`[render] Found ${audioElements.length} audio elements.`);
       if (audioElements.length > 0) {
-        console.log(`[poc] Mixing audio tracks...`);
+        console.log(`[render] Mixing audio tracks...`);
         const mixResult = await processCompositionAudio(
           audioElements,
           CLIENT_PUBLIC,
           AUDIO_WORK,
-          AUDIO_WAV,
+          AUDIO_OUT,
           TOTAL_DURATION_REF.value,
         );
         if (mixResult.success) {
-          console.log(`[poc] Muxing video + audio into final MP4...`);
-          const muxResult = await muxVideoWithAudio(
+          console.log(`[render] Muxing video + audio into final MP4...`);
+          await runFfmpeg([
+            "-y",
+            "-i",
             VIDEO_ONLY_MP4,
-            AUDIO_WAV,
+            "-i",
+            AUDIO_OUT,
+            "-c:v",
+            "copy",
+            "-c:a",
+            "copy",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-movflags",
+            "+faststart",
             OUTPUT_MP4,
-          );
-          if (!muxResult.success) {
-            throw new Error(`Mux failed: ${muxResult.error}`);
-          }
+          ]);
           await unlink(VIDEO_ONLY_MP4).catch(() => {});
-          await unlink(AUDIO_WAV).catch(() => {});
+          await unlink(AUDIO_OUT).catch(() => {});
         } else {
           console.warn(
-            `[poc] Audio mix failed (${mixResult.error}), falling back to silent video.`,
+            `[render] Audio mix failed (${mixResult.error}), falling back to silent video.`,
           );
           await rm(OUTPUT_MP4, { force: true });
           await copyFile(VIDEO_ONLY_MP4, OUTPUT_MP4);
@@ -234,9 +243,9 @@ async function main() {
       await copyFile(VIDEO_ONLY_MP4, OUTPUT_MP4);
     }
 
-    console.log(`[poc] ✅ Wrote ${OUTPUT_MP4}`);
+    console.log(`[render] ✅ Wrote ${OUTPUT_MP4}`);
   } finally {
-    console.log(`[poc] Stopping Vite dev server (SIGKILL)...`);
+    console.log(`[render] Stopping Vite dev server (SIGKILL)...`);
     try {
       if (vite.pid) process.kill(-vite.pid, "SIGKILL");
     } catch (_e) {
