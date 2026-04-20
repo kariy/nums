@@ -19,8 +19,12 @@ const ROOT = path.resolve(__dirname, "..");
 const WIDTH = 376;
 const HEIGHT = 596;
 const FPS = 120;
-const DURATION_SECONDS = 1;
-const TOTAL_FRAMES = FPS * DURATION_SECONDS;
+const FRAMES_PER_STATE = 40;
+const INTRO_FRAMES = 60;
+const OUTRO_FRAMES = 60;
+const SNAPSHOT_COUNT = 3;
+const TOTAL_FRAMES =
+  INTRO_FRAMES + SNAPSHOT_COUNT * FRAMES_PER_STATE + OUTRO_FRAMES;
 const VITE_HOST = "127.0.0.1";
 const VITE_PORT = 5180;
 const VITE_URL = `http://${VITE_HOST}:${VITE_PORT}/`;
