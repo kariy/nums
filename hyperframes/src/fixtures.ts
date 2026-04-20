@@ -1,0 +1,58 @@
+import type { GameSnapshot } from "./types";
+
+export const POC_SNAPSHOTS: GameSnapshot[] = [
+  {
+    id: 1,
+    number: 42,
+    next_number: 0,
+    level: 0,
+    reward: 0,
+    multiplier: 1,
+    slots: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    traps: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    disabled_traps: [
+      false, false, false, false, false, false, false, false, false, false,
+      false, false, false, false, false, false, false, false, false, false,
+    ],
+    selected_powers: [],
+    enabled_powers: [false, false, false, false],
+    selectable_powers: [],
+    over: 0,
+  },
+  {
+    id: 1,
+    number: 157,
+    next_number: 42,
+    level: 1,
+    reward: 10,
+    multiplier: 1,
+    slots: [42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    traps: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    disabled_traps: [
+      false, false, false, false, false, false, false, false, false, false,
+      false, false, false, false, false, false, false, false, false, false,
+    ],
+    selected_powers: [],
+    enabled_powers: [false, false, false, false],
+    selectable_powers: [],
+    over: 0,
+  },
+  {
+    id: 1,
+    number: 321,
+    next_number: 157,
+    level: 2,
+    reward: 25,
+    multiplier: 1,
+    slots: [42, 157, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    traps: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    disabled_traps: [
+      false, false, false, false, false, false, false, false, false, false,
+      false, false, false, false, false, false, false, false, false, false,
+    ],
+    selected_powers: [],
+    enabled_powers: [false, false, false, false],
+    selectable_powers: [],
+    over: 0,
+  },
+];

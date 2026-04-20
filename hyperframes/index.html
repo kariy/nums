@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nums Hyperframes POC</title>
+    <style>
+      html,
+      body,
+      #root {
+        margin: 0;
+        padding: 0;
+        width: 376px;
+        height: 596px;
+        overflow: hidden;
+        background: #000;
+      }
+      /* Force the exact canvas dimensions used by the Remotion composition. */
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/poc-app.tsx"></script>
+  </body>
+</html>
