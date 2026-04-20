@@ -5,11 +5,11 @@ import topLevelAwait from "vite-plugin-top-level-await";
 import path from "node:path";
 
 /**
- * Vite config for the Hyperframes POC.
+ * Vite config for the Hyperframes render pipeline.
  *
- * Mirrors remotion/remotion.config.ts so the client components render
- * identically. We reuse the client's source directly via the `@/` alias
- * and the public assets via the `/assets`, `/sounds`, `/musics` aliases.
+ * The `@/` alias + asset path aliases let us reuse the client's React
+ * components, CSS, and public assets directly, so the rendered video is
+ * pixel-identical to what the player sees in the app.
  */
 export default defineConfig({
   root: __dirname,

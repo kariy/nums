@@ -1,7 +1,6 @@
 packages:
   - "client"
   - "contracts/tokens"
-  - "remotion"
   - "hyperframes"
 catalog:
   "@cartridge/connector": "0.13.11-alpha.2"
