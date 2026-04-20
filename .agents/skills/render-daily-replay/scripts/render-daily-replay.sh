@@ -122,9 +122,9 @@ require_cmd python3
 require_cmd pnpm
 require_cmd git
 
-# Must run from repo root: the `pnpm remotion:render:game` wrapper already
-# handles `cd remotion` internally, so chdir into `remotion/` here would
-# break workspace resolution.
+# Must run from repo root: the `pnpm hyperframes:render:game` wrapper
+# already handles `cd hyperframes` internally, so chdir into
+# `hyperframes/` here would break workspace resolution.
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
@@ -175,7 +175,7 @@ else
 
   # Abort on explicit error payloads or missing field. A stale/guessed price
   # would silently produce a misleading video, which is a worse outcome than
-  # a loud failure. Never fall back to the default 0.01138 from root.tsx.
+  # a loud failure. Never fall back to the default 0.01138 from main.tsx.
   if echo "$EKUBO_RESPONSE" | jq -e 'has("error")' >/dev/null 2>&1; then
     ERR_MSG="$(echo "$EKUBO_RESPONSE" | jq -r '.error')"
     die "Ekubo returned error: $ERR_MSG"
@@ -206,14 +206,14 @@ echo ""
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "[dry-run] would execute:"
-  echo "  pnpm remotion:render:game '$PROPS_JSON'"
+  echo "  pnpm hyperframes:render:game '$PROPS_JSON'"
   exit 0
 fi
 
 echo "→ rendering (this takes ~2–5 min, output blocks until done)…"
-pnpm remotion:render:game "$PROPS_JSON"
+pnpm hyperframes:render:game "$PROPS_JSON"
 
-OUTPUT_PATH="$REPO_ROOT/remotion/out/game-replay.mp4"
+OUTPUT_PATH="$REPO_ROOT/hyperframes/out/game-replay.mp4"
 if [[ -s "$OUTPUT_PATH" ]]; then
   SIZE="$(ls -lh "$OUTPUT_PATH" | awk '{print $5}')"
   echo ""

@@ -1,8 +1,8 @@
 ---
 name: render-daily-replay
-description: Auto-render a Remotion video replay of a Nums game on Mainnet. Resolves the target `gameId` from Torii (best reward of the day OR best score of the day, OR a specific gameId the user provides), silently auto-fetches the current NUMS price from Ekubo, then runs `pnpm remotion:render:game` with the right props. Use when the user asks to render today's top game, the daily winner, the biggest reward, the highest score, or any specific gameId, without having to assemble the render command by hand.
+description: Auto-render a Hyperframes video replay of a Nums game on Mainnet. Resolves the target `gameId` from Torii (best reward of the day OR best score of the day, OR a specific gameId the user provides), silently auto-fetches the current NUMS price from Ekubo, then runs `pnpm hyperframes:render:game` with the right props. Use when the user asks to render today's top game, the daily winner, the biggest reward, the highest score, or any specific gameId, without having to assemble the render command by hand.
 metadata:
-  tags: nums, remotion, replay, daily, torii, mainnet, ekubo, render, video, automation
+  tags: nums, hyperframes, replay, daily, torii, mainnet, ekubo, render, video, automation
 ---
 
 ## When to use
@@ -14,16 +14,16 @@ Load this skill when the user asks for things like:
 - "Render the daily winner"
 - "Render game 1523"
 - "Render today's highest score as a replay"
-- Any request that maps to the shape `pnpm remotion:render:game '{"gameId":N,"numsPrice":P}'`
+- Any request that maps to the shape `pnpm hyperframes:render:game '{"gameId":N,"numsPrice":P}'`
 
-For how the Remotion package is wired internally (webpack, overrides, fonts, hosting), also load **`nums-remotion-replay`**. This skill is about **calling** the render command; that one is about **editing** the render code.
+For how the Hyperframes package is wired internally (Vite setup, `window.__hf` protocol, fonts, audio pipeline, hosting), see `hyperframes/MIGRATION_STATUS.md`. This skill is about **calling** the render command; that document is about **editing** the render code.
 
 ## Core principle
 
 Every happy path through this skill ends with exactly one command:
 
 ```bash
-pnpm remotion:render:game '{"gameId":<N>,"numsPrice":<P>}'
+pnpm hyperframes:render:game '{"gameId":<N>,"numsPrice":<P>}'
 ```
 
 run from the repo root. Everything else in this skill is about resolving `<N>` and `<P>` with zero user guesswork.
@@ -155,8 +155,8 @@ The script:
 2. Converts hex → decimal.
 3. Fetches `numsPrice` from Ekubo and computes `total_calculated / 1e6 / 100`.
 4. Echoes a summary block (game id, username/score if applicable, numsPrice).
-5. Invokes `pnpm remotion:render:game '{"gameId":N,"numsPrice":P}'`.
-6. Verifies `remotion/out/game-replay.mp4` exists.
+5. Invokes `pnpm hyperframes:render:game '{"gameId":N,"numsPrice":P}'`.
+6. Verifies `hyperframes/out/game-replay.mp4` exists.
 
 Flags:
 
@@ -175,29 +175,29 @@ Before running the script, tell the user:
 - The auto-fetched `numsPrice`
 - The fact that rendering takes 2–5 minutes
 
-Then run the script (without `--dry-run`) and stream its output. The final `.mp4` lands at `remotion/out/game-replay.mp4`.
+Then run the script (without `--dry-run`) and stream its output. The final `.mp4` lands at `hyperframes/out/game-replay.mp4`.
 
 ### Step 4 — Confirm output
 
 After the script exits cleanly:
 
 ```bash
-ls -lh remotion/out/game-replay.mp4
+ls -lh hyperframes/out/game-replay.mp4
 ```
 
 Report the absolute path and file size to the user.
 
 ## Non-obvious gotchas
 
-1. **Torii URL lives in `client/.env.production`**, not at repo root. Key is `VITE_SN_MAIN_TORII_URL`, and SQL is served at `${URL}/sql`. Do not hardcode a different host; the value in `remotion/src/data/torii.ts` uses a legacy alias (`nums-main`) that happens to resolve to the same instance, but this skill is authoritative on the mainnet URL.
+1. **Torii URL lives in `client/.env.production`**, not at repo root. Key is `VITE_SN_MAIN_TORII_URL`, and SQL is served at `${URL}/sql`. Do not hardcode a different host; the value in `hyperframes/src/data/torii.ts` uses a legacy alias (`nums-main`) that happens to resolve to the same instance, but this skill is authoritative on the mainnet URL.
 
 2. **`game_id` is hex-encoded in both queries, with different padding.** Query A pads to 16 hex chars (`0x00000000000005f3`), Query B pads to 64 (`0x00000000...000005f3`). Both must be parsed as `int(hex, 16)` before being embedded in the render props. The helper script does this with `python3`.
 
-3. **`numsPrice` is a JSON number, not a string.** `'{"numsPrice":0.012}'` is correct; `'{"numsPrice":"0.012"}'` will crash Zod validation in `remotion/src/root.tsx`. When printing the final JSON, use `printf '%s' "$json"` rather than `echo` to avoid surprises with special chars.
+3. **`numsPrice` is a JSON number, not a string.** `'{"numsPrice":0.012}'` is correct; `'{"numsPrice":"0.012"}'` is parsed as `NaN` in `hyperframes/src/main.tsx` and falls back to the default. When printing the final JSON, use `printf '%s' "$json"` rather than `echo` to avoid surprises with special chars.
 
-4. **Render command must run from repo root**, not from `remotion/`. The root `package.json` wrapper handles the `cd remotion` internally. The helper script enforces this with `cd "$(git rev-parse --show-toplevel)"`.
+4. **Render command must run from repo root**, not from `hyperframes/`. The root `package.json` wrapper handles the `cd hyperframes` internally. The helper script enforces this with `cd "$(git rev-parse --show-toplevel)"`.
 
-5. **Ekubo silent failures.** If Ekubo returns `{"error":"..."}` or `total_calculated` is missing, the script must abort with a clear message — do **not** fall back to the default `0.01138` from `remotion/src/root.tsx`, and do **not** ask the user to guess. A stale price on the video is a worse outcome than a failed render.
+5. **Ekubo silent failures.** If Ekubo returns `{"error":"..."}` or `total_calculated` is missing, the script must abort with a clear message — do **not** fall back to the default `0.01138` from `hyperframes/src/main.tsx`, and do **not** ask the user to guess. A stale price on the video is a worse outcome than a failed render.
 
 6. **Empty Torii result.** If today has no claimed rewards (Query A empty) or no leaderboard entries (Query B empty), abort with a clear message. Offer to fall back to the other query or to a user-supplied `gameId`. Never pass `null`/`undefined` to the render command.
 
@@ -207,7 +207,7 @@ Report the absolute path and file size to the user.
 
 9. **The render command blocks.** It takes 2–5 minutes depending on `snapshots.length`. Do **not** background it — the user needs to see the output, and failures should propagate. If Claude runs this via a tool call, pass a generous timeout (e.g. 10 min).
 
-10. **Video dimensions must stay even.** This is the concern of `nums-remotion-replay`, not this skill, but be aware: if the render fails with an H264 error, load that skill.
+10. **Video dimensions must stay even.** This is the concern of the hyperframes package itself, not this skill, but be aware: if the render fails with an H264 error, the composition dimensions in `hyperframes/src/main.tsx` (376x596) and the Chrome args built by `buildChromeArgs` must both be even. H264 rejects odd pixel counts.
 
 ## Example conversation shapes
 
@@ -244,6 +244,8 @@ Claude:
 
 ## Related skills
 
-- **`nums-remotion-replay`** — how the `remotion/` package is wired (webpack, overrides, fonts, hosting, `calculateMetadata`). Load this if rendering fails with a code-level error.
-- **`remotion-best-practices`** — generic Remotion patterns.
 - **`dojo-indexer`** — Torii SQL endpoint structure and how Dojo models are indexed.
+
+## See also
+
+- `hyperframes/MIGRATION_STATUS.md` — how the `hyperframes/` package is wired (Vite setup, `window.__hf` protocol, fonts, audio pipeline). Load this if rendering fails with a code-level error.
