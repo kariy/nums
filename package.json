@@ -25,7 +25,10 @@
     "remotion:studio": "cd remotion && pnpm studio",
     "remotion:render": "cd remotion && npx remotion render src/index.ts replay out/game-replay.mp4",
     "remotion:render:game": "cd remotion && npx remotion render src/index.ts replay out/game-replay.mp4 --props",
-    "remotion:still": "cd remotion && npx remotion still src/index.ts replay out/frame.png"
+    "remotion:still": "cd remotion && npx remotion still src/index.ts replay out/frame.png",
+    "hyperframes:dev": "cd hyperframes && pnpm dev",
+    "hyperframes:render": "cd hyperframes && pnpm render",
+    "hyperframes:render:game": "cd hyperframes && pnpm render:game"
   },
   "dependencies": {
     "@bal7hazar/arcade-sdk": "^0.0.74",
