@@ -11,6 +11,7 @@ import {
   initializeSession,
   captureFrame,
   closeCaptureSession,
+  getCompositionDuration,
   parseAudioElements,
   processCompositionAudio,
   muxVideoWithAudio,
@@ -20,20 +21,60 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const CLIENT_PUBLIC = path.resolve(ROOT, "..", "client", "public");
 
+const TOTAL_DURATION_REF = { value: 0 };
+
 const WIDTH = 376;
 const HEIGHT = 596;
 const FPS = 120;
-const FRAMES_PER_STATE = 40;
-const INTRO_FRAMES = 60;
-const OUTRO_FRAMES = 60;
-const SNAPSHOT_COUNT = 3;
-const TOTAL_FRAMES =
-  INTRO_FRAMES + SNAPSHOT_COUNT * FRAMES_PER_STATE + OUTRO_FRAMES;
-const TOTAL_DURATION = TOTAL_FRAMES / FPS;
 
 const VITE_HOST = "127.0.0.1";
 const VITE_PORT = 5180;
-const VITE_URL = `http://${VITE_HOST}:${VITE_PORT}/`;
+
+type CliArgs = {
+  gameId: number | null;
+  numsPrice: number;
+};
+
+function parseCliArgs(): CliArgs {
+  const args = process.argv.slice(2);
+  let gameId: number | null = null;
+  let numsPrice = 0.01138;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--game-id" || arg === "-g") {
+      gameId = Number.parseInt(args[++i] ?? "", 10);
+    } else if (arg === "--nums-price" || arg === "-p") {
+      numsPrice = Number.parseFloat(args[++i] ?? "");
+    } else if (arg.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(arg) as {
+          gameId?: number;
+          numsPrice?: number;
+        };
+        if (parsed.gameId != null) gameId = parsed.gameId;
+        if (parsed.numsPrice != null) numsPrice = parsed.numsPrice;
+      } catch (_e) {
+        void _e;
+      }
+    }
+  }
+
+  if (process.env.GAME_ID) gameId = Number.parseInt(process.env.GAME_ID, 10);
+  if (process.env.NUMS_PRICE)
+    numsPrice = Number.parseFloat(process.env.NUMS_PRICE);
+
+  if (!Number.isFinite(numsPrice)) numsPrice = 0.01138;
+  if (gameId !== null && !Number.isFinite(gameId)) gameId = null;
+
+  return { gameId, numsPrice };
+}
+
+const CLI = parseCliArgs();
+const QS = new URLSearchParams();
+if (CLI.gameId != null) QS.set("gameId", String(CLI.gameId));
+QS.set("numsPrice", String(CLI.numsPrice));
+const VITE_URL = `http://${VITE_HOST}:${VITE_PORT}/?${QS.toString()}`;
 const FRAMES_DIR = path.resolve(ROOT, "out", "frames");
 const VIDEO_ONLY_MP4 = path.resolve(ROOT, "out", "video-only.mp4");
 const AUDIO_WAV = path.resolve(ROOT, "out", "audio.wav");
@@ -75,7 +116,10 @@ async function main() {
     await rm(AUDIO_WORK, { recursive: true, force: true });
   }
 
-  console.log(`[poc] Starting Vite dev server on ${VITE_URL}...`);
+  console.log(
+    `[render] gameId=${CLI.gameId ?? "(fixtures)"} numsPrice=${CLI.numsPrice}`,
+  );
+  console.log(`[render] Starting Vite dev server on ${VITE_URL}...`);
   const vite = startViteServer();
 
   let pageHtml: string | null = null;
@@ -104,20 +148,26 @@ async function main() {
 
       try {
         await initializeSession(session);
+
+        const duration = await getCompositionDuration(session);
+        const totalFrames = Math.round(duration * FPS);
         console.log(
-          `[poc] Session initialized. Capturing ${TOTAL_FRAMES} frames @${FPS}fps...`,
+          `[render] Composition duration=${duration.toFixed(
+            2,
+          )}s totalFrames=${totalFrames} @${FPS}fps`,
         );
 
-        for (let i = 0; i < TOTAL_FRAMES; i++) {
+        for (let i = 0; i < totalFrames; i++) {
           const time = i / FPS;
           await captureFrame(session, i, time);
-          if (i % 30 === 0 || i === TOTAL_FRAMES - 1) {
+          if (i % 60 === 0 || i === totalFrames - 1) {
             console.log(
-              `[poc]   frame ${i + 1}/${TOTAL_FRAMES} (t=${time.toFixed(3)}s)`,
+              `[render]   frame ${i + 1}/${totalFrames} (t=${time.toFixed(3)}s)`,
             );
           }
         }
 
+        TOTAL_DURATION_REF.value = duration;
         pageHtml = await session.page.content();
       } finally {
         await closeCaptureSession(session);
@@ -154,7 +204,7 @@ async function main() {
           CLIENT_PUBLIC,
           AUDIO_WORK,
           AUDIO_WAV,
-          TOTAL_DURATION,
+          TOTAL_DURATION_REF.value,
         );
         if (mixResult.success) {
           console.log(`[poc] Muxing video + audio into final MP4...`);

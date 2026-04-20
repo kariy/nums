@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "render:poc": "tsx scripts/render-poc.ts"
+    "render": "tsx scripts/render-game.ts",
+    "render:game": "tsx scripts/render-game.ts"
   },
   "dependencies": {
     "@hyperframes/core": "^0.4.10",
