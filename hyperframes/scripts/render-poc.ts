@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,10 +11,14 @@ import {
   initializeSession,
   captureFrame,
   closeCaptureSession,
+  parseAudioElements,
+  processCompositionAudio,
+  muxVideoWithAudio,
 } from "@hyperframes/engine";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+const CLIENT_PUBLIC = path.resolve(ROOT, "..", "client", "public");
 
 const WIDTH = 376;
 const HEIGHT = 596;
@@ -25,10 +29,15 @@ const OUTRO_FRAMES = 60;
 const SNAPSHOT_COUNT = 3;
 const TOTAL_FRAMES =
   INTRO_FRAMES + SNAPSHOT_COUNT * FRAMES_PER_STATE + OUTRO_FRAMES;
+const TOTAL_DURATION = TOTAL_FRAMES / FPS;
+
 const VITE_HOST = "127.0.0.1";
 const VITE_PORT = 5180;
 const VITE_URL = `http://${VITE_HOST}:${VITE_PORT}/`;
 const FRAMES_DIR = path.resolve(ROOT, "out", "frames");
+const VIDEO_ONLY_MP4 = path.resolve(ROOT, "out", "video-only.mp4");
+const AUDIO_WAV = path.resolve(ROOT, "out", "audio.wav");
+const AUDIO_WORK = path.resolve(ROOT, "out", "audio-work");
 const OUTPUT_MP4 = path.resolve(ROOT, "out", "game-replay.mp4");
 
 async function waitForUrl(url: string, timeoutMs = 60000): Promise<void> {
@@ -49,6 +58,7 @@ function startViteServer(): ChildProcess {
   const proc = spawn("pnpm", ["dev"], {
     cwd: ROOT,
     stdio: "pipe",
+    detached: true,
     env: { ...process.env, NO_COLOR: "1" },
   });
   proc.stdout?.on("data", (d) => process.stdout.write(`[vite] ${d}`));
@@ -61,9 +71,14 @@ async function main() {
     await rm(FRAMES_DIR, { recursive: true, force: true });
   }
   await mkdir(FRAMES_DIR, { recursive: true });
+  if (existsSync(AUDIO_WORK)) {
+    await rm(AUDIO_WORK, { recursive: true, force: true });
+  }
 
   console.log(`[poc] Starting Vite dev server on ${VITE_URL}...`);
   const vite = startViteServer();
+
+  let pageHtml: string | null = null;
 
   try {
     await waitForUrl(VITE_URL);
@@ -102,6 +117,8 @@ async function main() {
             );
           }
         }
+
+        pageHtml = await session.page.content();
       } finally {
         await closeCaptureSession(session);
       }
@@ -109,7 +126,7 @@ async function main() {
       await releaseBrowser(acquired.browser);
     }
 
-    console.log(`[poc] Encoding MP4 with ffmpeg...`);
+    console.log(`[poc] Encoding video (no audio) with ffmpeg...`);
     await runFfmpeg([
       "-y",
       "-framerate",
@@ -124,16 +141,65 @@ async function main() {
       "medium",
       "-movflags",
       "+faststart",
-      OUTPUT_MP4,
+      VIDEO_ONLY_MP4,
     ]);
+
+    if (pageHtml) {
+      const audioElements = parseAudioElements(pageHtml);
+      console.log(`[poc] Found ${audioElements.length} audio elements.`);
+      if (audioElements.length > 0) {
+        console.log(`[poc] Mixing audio tracks...`);
+        const mixResult = await processCompositionAudio(
+          audioElements,
+          CLIENT_PUBLIC,
+          AUDIO_WORK,
+          AUDIO_WAV,
+          TOTAL_DURATION,
+        );
+        if (mixResult.success) {
+          console.log(`[poc] Muxing video + audio into final MP4...`);
+          const muxResult = await muxVideoWithAudio(
+            VIDEO_ONLY_MP4,
+            AUDIO_WAV,
+            OUTPUT_MP4,
+          );
+          if (!muxResult.success) {
+            throw new Error(`Mux failed: ${muxResult.error}`);
+          }
+          await unlink(VIDEO_ONLY_MP4).catch(() => {});
+          await unlink(AUDIO_WAV).catch(() => {});
+        } else {
+          console.warn(
+            `[poc] Audio mix failed (${mixResult.error}), falling back to silent video.`,
+          );
+          await rm(OUTPUT_MP4, { force: true });
+          await copyFile(VIDEO_ONLY_MP4, OUTPUT_MP4);
+        }
+      } else {
+        await rm(OUTPUT_MP4, { force: true });
+        await copyFile(VIDEO_ONLY_MP4, OUTPUT_MP4);
+      }
+    } else {
+      await rm(OUTPUT_MP4, { force: true });
+      await copyFile(VIDEO_ONLY_MP4, OUTPUT_MP4);
+    }
 
     console.log(`[poc] ✅ Wrote ${OUTPUT_MP4}`);
   } finally {
-    console.log(`[poc] Stopping Vite dev server...`);
-    vite.kill("SIGTERM");
-    await new Promise((r) => setTimeout(r, 500));
-    if (!vite.killed) vite.kill("SIGKILL");
+    console.log(`[poc] Stopping Vite dev server (SIGKILL)...`);
+    try {
+      if (vite.pid) process.kill(-vite.pid, "SIGKILL");
+    } catch (_e) {
+      void _e;
+    }
+    vite.kill("SIGKILL");
   }
+}
+
+async function copyFile(src: string, dst: string): Promise<void> {
+  const buf = await readFile(src);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(dst, buf);
 }
 
 function runFfmpeg(args: string[]): Promise<void> {

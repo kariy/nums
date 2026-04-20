@@ -5,6 +5,7 @@ import { WelcomeScene } from "@/components/scenes/welcome";
 import { GameOver } from "@/components/containers/game-over";
 import { useFrame } from "./frame-store";
 import { snapshotToGame, computeSceneProps } from "./scene-props";
+import { buildAudioTimeline } from "./audio-timeline";
 import type { GameSnapshot } from "./types";
 
 export type ReplayProps = {
@@ -12,6 +13,8 @@ export type ReplayProps = {
   framesPerState: number;
   introFrames: number;
   outroFrames: number;
+  totalFrames: number;
+  fps: number;
   numsPrice: number;
 };
 
@@ -20,6 +23,8 @@ export function Replay({
   framesPerState,
   introFrames,
   outroFrames,
+  totalFrames,
+  fps,
   numsPrice,
 }: ReplayProps) {
   const frame = useFrame();
@@ -37,6 +42,14 @@ export function Replay({
   const snapshot = snapshots[stateIndex];
   const game = snapshotToGame(snapshot);
   const { stages, powers, slots } = computeSceneProps(game);
+
+  const audioCues = buildAudioTimeline({
+    snapshots,
+    framesPerState,
+    introFrames,
+    fps,
+    totalFrames,
+  });
 
   void outroFrames;
 
@@ -111,6 +124,20 @@ export function Replay({
             </TooltipProvider>
           )}
         </MotionConfig>
+      </div>
+
+      <div aria-hidden style={{ display: "none" }}>
+        {audioCues.map((cue) => (
+          <audio
+            key={cue.id}
+            id={cue.id}
+            src={cue.src}
+            data-start={cue.start}
+            data-end={cue.end}
+            data-volume={cue.volume ?? 1}
+            preload="none"
+          />
+        ))}
       </div>
     </div>
   );

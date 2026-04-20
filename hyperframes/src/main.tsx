@@ -41,6 +41,8 @@ async function bootstrap() {
       framesPerState={FRAMES_PER_STATE}
       introFrames={INTRO_FRAMES}
       outroFrames={OUTRO_FRAMES}
+      totalFrames={totalFrames}
+      fps={FPS}
       numsPrice={numsPrice}
     />,
   );
