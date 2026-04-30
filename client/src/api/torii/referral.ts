@@ -35,7 +35,7 @@ async function fetch(
     data->>'$.bundle_id' AS bundle_id,
     executed_at
 FROM event_messages_historical
-JOIN controllers AS c ON c.address = data->>'$.recipient'
+LEFT JOIN controllers AS c ON c.address = data->>'$.recipient'
 WHERE model_id = '${MODEL_ID}'
 AND data->>'$.referrer.Some' IS NOT NULL
 AND data->>'$.referrer.Some' = '${address}'

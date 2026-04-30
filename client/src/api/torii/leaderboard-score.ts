@@ -15,7 +15,7 @@ async function fetch(): Promise<LeaderboardScoreRow[]> {
     COUNT(*) AS games_played,
     SUM(('0x' || LTRIM(SUBSTR(g.reward, 3), '0') ->> '$')) AS total_reward
 FROM "NUMS-Claimed" AS g
-JOIN controllers AS c ON c.address = g.player_id
+LEFT JOIN controllers AS c ON c.address = g.player_id
 GROUP BY g.player_id, c.username
 ORDER BY total_reward DESC`;
 
