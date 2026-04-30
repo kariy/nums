@@ -27,7 +27,7 @@ async function fetch(
     COUNT(DISTINCT data->>'$.recipient') AS players,
     SUM(('0x' || LTRIM(SUBSTR(data->>'$.amount', 3), '0') ->> '$')) AS amount
 FROM event_messages_historical
-JOIN controllers AS c ON c.address = data->>'$.referrer.Some'
+LEFT JOIN controllers AS c ON c.address = data->>'$.referrer.Some'
 WHERE model_id = '${MODEL_ID}'
 AND data->>'$.referrer.Some' IS NOT NULL
 AND data->>'$.bundle_id' IN (${bundleIds.join(",")})

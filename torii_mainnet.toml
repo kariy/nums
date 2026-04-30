@@ -16,6 +16,12 @@ polling_interval = 250
 contracts = []
 
 [sql]
+all_model_indices = false
+model_indices = [
+  { model_tag = "NUMS-LeaderboardScore", fields = [
+    "timestamp",
+  ] },
+]
 historical = [
   "NUMS-TrophyProgression",
   "NUMS-QuestProgression",
@@ -24,4 +30,4 @@ historical = [
 ]
 
 [erc]
-metadata_updates = true
+metadata_updates = false

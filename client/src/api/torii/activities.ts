@@ -36,8 +36,8 @@ async function fetch(limit: number, offset: number): Promise<ActivityRow[]> {
     s.score,
     s.timestamp
 FROM "NUMS-LeaderboardScore" AS s
-JOIN controllers AS c ON s.player = c.address
-JOIN "NUMS-Game" AS g ON LTRIM(REPLACE(s.game_id, '0x', ''), '0') = LTRIM(REPLACE(g.id, '0x', ''), '0')
+LEFT JOIN controllers AS c ON s.player = c.address
+LEFT JOIN "NUMS-Game" AS g ON LTRIM(REPLACE(s.game_id, '0x', ''), '0') = LTRIM(REPLACE(g.id, '0x', ''), '0')
 ORDER BY timestamp DESC
 LIMIT ${limit}
 OFFSET ${offset};`;
