@@ -35,10 +35,7 @@ pub trait ISettler<T> {
 
 const ADMIN_ROLE: felt252 = selector!("ADMIN_ROLE");
 
-// TODO(lane B): replace with `crate::constants::MATERIALIZE_SELECTOR` once Lane B
-// adds the constant. Defined locally here so Lane A compiles standalone — values
-// MUST match (`selector!("materialize")`).
-pub const MATERIALIZE_SELECTOR: felt252 = selector!("materialize");
+pub use crate::constants::MATERIALIZE_SELECTOR;
 
 /// Decoded payload of a `SettlementRequest` Piltover message.
 ///

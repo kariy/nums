@@ -24,6 +24,10 @@ pub struct Config {
     pub pool_extension: ContractAddress,
     pub pool_sqrt: u256,
     pub base_price: u256,
+    pub bridge_settler: ContractAddress,
+    pub usdc_bridge: ContractAddress,
+    pub bridge_messaging: ContractAddress,
+    pub materializer: ContractAddress,
 }
 
 #[derive(Copy, Drop, Serde, IntrospectPacked)]
@@ -70,4 +74,33 @@ pub struct VaultPosition {
     pub time_lock: u64,
     pub current_reward: u256,
     pub pending_reward: u256,
+}
+
+#[derive(Copy, Drop, Serde, Introspect, PartialEq, Default, DojoStore)]
+pub enum PendingStatus {
+    #[default]
+    Pending,
+    Settled,
+    Cancelled,
+}
+
+#[derive(Drop, Serde, Introspect)]
+#[dojo::model]
+pub struct PendingPurchase {
+    #[key]
+    pub message_id: felt252,
+    pub nonce: u64,
+    pub recipient: ContractAddress,
+    pub bundle_id: u32,
+    pub quantity: u32,
+    pub price: u256,
+    pub status: PendingStatus,
+}
+
+#[derive(Drop, Serde, IntrospectPacked)]
+#[dojo::model]
+pub struct BridgeNonce {
+    #[key]
+    pub world_resource: felt252,
+    pub next: u64,
 }

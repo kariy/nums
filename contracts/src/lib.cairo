@@ -7,6 +7,7 @@ pub mod systems {
     pub mod collection;
     pub mod faucet;
     pub mod governor;
+    pub mod materializer;
     pub mod play;
     pub mod settler;
     pub mod setup;
@@ -16,6 +17,7 @@ pub mod systems {
 }
 
 pub mod components {
+    pub mod bridge;
     pub mod playable;
     pub mod purchase;
     pub mod rewardable;
@@ -30,6 +32,7 @@ pub mod models {
 }
 
 pub mod events {
+    pub mod bridge;
     pub mod claimed;
     pub mod index;
     pub mod purchased;
@@ -142,6 +145,8 @@ pub mod mocks {
 #[cfg(test)]
 pub mod tests {
     pub mod setup;
+    pub mod test_bridge;
+    pub mod test_materializer;
     pub mod test_settler;
     pub mod test_setup;
 }

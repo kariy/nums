@@ -19,6 +19,10 @@ pub trait ISetup<T> {
     fn set_pool_sqrt(ref self: T, pool_sqrt: u256);
     fn set_base_price(ref self: T, base_price: u256);
     fn set_average_score(ref self: T, average_score: u32, average_weigth: u16);
+    fn set_bridge_settler(ref self: T, bridge_settler: ContractAddress);
+    fn set_usdc_bridge(ref self: T, usdc_bridge: ContractAddress);
+    fn set_bridge_messaging(ref self: T, bridge_messaging: ContractAddress);
+    fn set_materializer(ref self: T, materializer: ContractAddress);
     fn merkledrop_register(ref self: T, data: Span<Span<felt252>>, expiration: u64) -> felt252;
     fn merkledrop_claim(
         ref self: T,
@@ -27,6 +31,19 @@ pub trait ISetup<T> {
         data: Span<felt252>,
         receiver: ContractAddress,
     );
+    /// Called by the Katana Materializer (l1_handler) to settle a `PendingPurchase`
+    /// after the mainnet Settler has confirmed the swap+burn+vault flow.
+    fn materialize_pending(
+        ref self: T,
+        message_id: felt252,
+        multiplier: u128,
+        supply: u256,
+        price: u256,
+        quantity: u32,
+    );
+    /// Admin escape hatch: marks a Pending purchase as Cancelled, mints fallback games
+    /// to the player, and starts cancellation of the unconsumed mainnet message.
+    fn admin_settle(ref self: T, message_id: felt252);
 }
 
 const ADMIN_ROLE: felt252 = selector!("ADMIN_ROLE");
@@ -36,6 +53,7 @@ pub mod Setup {
     use bundle::component::Component as BundleComponent;
     use bundle::component::Component::{BundleQuote, BundleTrait};
     use bundle::interface::IBundle;
+    use core::num::traits::Zero;
     use dojo::world::WorldStorageTrait;
     use merkledrop::component::Component as MerkledropComponent;
     use merkledrop::component::Component::MerkledropTrait;
@@ -43,10 +61,12 @@ pub mod Setup {
     use openzeppelin::introspection::src5::SRC5Component;
     use starknet::ContractAddress;
     use crate::StoreImpl;
+    use crate::components::bridge::BridgeComponent;
     use crate::components::purchase::PurchaseComponent;
     use crate::constants::{MULTIPLIER_PRECISION, NAMESPACE, WORLD_RESOURCE};
     use crate::mocks::vrf::NAME as VRF;
     use crate::models::config::ConfigTrait;
+    use crate::models::index::PendingStatus;
     use crate::systems::faucet::NAME as FAUCET;
     use crate::systems::play::{IPlayDispatcher, IPlayDispatcherTrait, NAME as PLAY};
     use crate::systems::token::NAME as TOKEN;
@@ -61,6 +81,8 @@ pub mod Setup {
     impl BundleFeeImpl of BundleComponent::BundleFeeTrait<ContractState> {}
     component!(path: PurchaseComponent, storage: purchase, event: PurchaseEvent);
     impl PurchaseInternalImpl = PurchaseComponent::InternalImpl<ContractState>;
+    component!(path: BridgeComponent, storage: bridge, event: BridgeEvent);
+    impl BridgeInternalImpl = BridgeComponent::InternalImpl<ContractState>;
     component!(path: MerkledropComponent, storage: merkledrop, event: MerkledropEvent);
     impl MerkledropInternalImpl = MerkledropComponent::InternalImpl<ContractState>;
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
@@ -79,6 +101,8 @@ pub mod Setup {
         #[substorage(v0)]
         purchase: PurchaseComponent::Storage,
         #[substorage(v0)]
+        bridge: BridgeComponent::Storage,
+        #[substorage(v0)]
         merkledrop: MerkledropComponent::Storage,
         #[substorage(v0)]
         accesscontrol: AccessControlComponent::Storage,
@@ -96,6 +120,8 @@ pub mod Setup {
         #[flat]
         PurchaseEvent: PurchaseComponent::Event,
         #[flat]
+        BridgeEvent: BridgeComponent::Event,
+        #[flat]
         MerkledropEvent: MerkledropComponent::Event,
         #[flat]
         AccessControlEvent: AccessControlComponent::Event,
@@ -112,12 +138,25 @@ pub mod Setup {
         ) {
             let mut contract_state = self.get_contract_mut();
             let world = contract_state.world(@NAMESPACE());
-            let (recipient, multiplier, supply, price, quantity) = contract_state
-                .purchase
-                .execute(world, recipient, bundle_id, quantity);
-            let play_address = world.dns_address(@PLAY()).expect('Play contract not found!');
-            let play = IPlayDispatcher { contract_address: play_address };
-            play.create(recipient, multiplier, supply, price, quantity);
+            let store = StoreImpl::new(world);
+            let config = store.config();
+            let bundle = store.bundle(bundle_id);
+
+            // [Branch] Free bundles always go through the inline path so the player
+            // gets games immediately, even on Katana.
+            if bundle.price == 0 || config.bridge_settler.is_zero() {
+                // Mainnet path (or free bundle on Katana).
+                let (recipient, multiplier, supply, price, quantity) = contract_state
+                    .purchase
+                    .execute(world, recipient, bundle_id, quantity);
+                let play_address = world.dns_address(@PLAY()).expect('Play contract not found!');
+                let play = IPlayDispatcher { contract_address: play_address };
+                play.create(recipient, multiplier, supply, price, quantity);
+            } else {
+                // Katana path: bridge to mainnet, defer game creation until the
+                // Materializer responds with the settlement result.
+                contract_state.bridge.dispatch(world, recipient, bundle_id, quantity);
+            }
         }
         fn supply(
             self: @BundleComponent::ComponentState<ContractState>, bundle_id: u32,
@@ -172,6 +211,10 @@ pub mod Setup {
         pool_tick_spacing: u128,
         pool_extension: ContractAddress,
         bundle_allower: ContractAddress,
+        bridge_settler: ContractAddress,
+        usdc_bridge: ContractAddress,
+        bridge_messaging: ContractAddress,
+        materializer: ContractAddress,
     ) {
         // [Setup] World and Store
         let mut world = self.world(@NAMESPACE());
@@ -209,6 +252,10 @@ pub mod Setup {
             pool_extension: pool_extension,
             pool_sqrt: pool_sqrt,
             base_price: entry_price.into(),
+            bridge_settler: bridge_settler,
+            usdc_bridge: usdc_bridge,
+            bridge_messaging: bridge_messaging,
+            materializer: materializer,
         );
         store.set_config(config);
 
@@ -421,6 +468,54 @@ pub mod Setup {
             store.set_config(config);
         }
 
+        fn set_bridge_settler(ref self: ContractState, bridge_settler: ContractAddress) {
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+            // [Check] Caller is allowed
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            // [Effect] Update config
+            let mut config = store.config();
+            config.bridge_settler = bridge_settler;
+            store.set_config(config);
+        }
+
+        fn set_usdc_bridge(ref self: ContractState, usdc_bridge: ContractAddress) {
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+            // [Check] Caller is allowed
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            // [Effect] Update config
+            let mut config = store.config();
+            config.usdc_bridge = usdc_bridge;
+            store.set_config(config);
+        }
+
+        fn set_bridge_messaging(ref self: ContractState, bridge_messaging: ContractAddress) {
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+            // [Check] Caller is allowed
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            // [Effect] Update config
+            let mut config = store.config();
+            config.bridge_messaging = bridge_messaging;
+            store.set_config(config);
+        }
+
+        fn set_materializer(ref self: ContractState, materializer: ContractAddress) {
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+            // [Check] Caller is allowed
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+            // [Effect] Update config
+            let mut config = store.config();
+            config.materializer = materializer;
+            store.set_config(config);
+        }
+
         fn merkledrop_register(
             ref self: ContractState, data: Span<Span<felt252>>, expiration: u64,
         ) -> felt252 {
@@ -440,6 +535,80 @@ pub mod Setup {
         ) {
             let world = self.world(@NAMESPACE());
             self.merkledrop.claim(world, tree_id, proofs, data, receiver)
+        }
+
+        fn materialize_pending(
+            ref self: ContractState,
+            message_id: felt252,
+            multiplier: u128,
+            supply: u256,
+            price: u256,
+            quantity: u32,
+        ) {
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+
+            // [Check] Caller is the configured Materializer.
+            let config = store.config();
+            let caller = starknet::get_caller_address();
+            assert(caller == config.materializer, 'Unauthorized materializer');
+
+            // [Check] Pending purchase exists and is still Pending.
+            let mut pending = store.pending_purchase(message_id);
+            assert(pending.status == PendingStatus::Pending, 'Already settled');
+
+            // [Effect] Mark settled.
+            pending.status = PendingStatus::Settled;
+            store.set_pending_purchase(@pending);
+
+            // [Event] Emit settlement event.
+            store.purchase_settled(message_id, multiplier, price);
+
+            // [Interaction] Create games for the player.
+            let play_address = world.dns_address(@PLAY()).expect('Play contract not found!');
+            let play = IPlayDispatcher { contract_address: play_address };
+            play.create(pending.recipient, multiplier, supply, price, quantity);
+        }
+
+        fn admin_settle(ref self: ContractState, message_id: felt252) {
+            // [Check] Only admin can use the escape hatch.
+            self.accesscontrol.assert_only_role(ADMIN_ROLE);
+
+            // [Setup] World and Store
+            let mut world = self.world(@NAMESPACE());
+            let mut store = StoreImpl::new(world);
+            let config = store.config();
+
+            // [Check] Pending purchase exists and is still Pending.
+            let mut pending = store.pending_purchase(message_id);
+            assert(pending.status == PendingStatus::Pending, 'Already settled');
+
+            // [Effect] Mark cancelled. Dual-spend protection comes from the
+            // `PendingStatus::Cancelled` check inside `materialize_pending` — if the
+            // mainnet message is later consumed and a Materialization message arrives,
+            // it will revert there. We do NOT attempt to cancel the unconsumed mainnet
+            // message: Piltover's cancellation primitive only applies to
+            // Starknet->Appchain messages, not the Appchain->Starknet direction this
+            // bridge uses. The economic settlement on mainnet, if it ever runs, simply
+            // completes against the Settler reserve as normal.
+            pending.status = PendingStatus::Cancelled;
+            store.set_pending_purchase(@pending);
+
+            // [Event] Emit cancellation event.
+            store.purchase_cancelled(message_id, MULTIPLIER_PRECISION);
+
+            // [Interaction] Mint fallback games so the player isn't stuck.
+            let play_address = world.dns_address(@PLAY()).expect('Play contract not found!');
+            let play = IPlayDispatcher { contract_address: play_address };
+            play
+                .create(
+                    pending.recipient,
+                    MULTIPLIER_PRECISION,
+                    config.target_supply,
+                    pending.price,
+                    pending.quantity,
+                );
         }
     }
 }
