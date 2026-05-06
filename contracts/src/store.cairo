@@ -6,13 +6,15 @@ use ekubo::components::clear::IClearDispatcher;
 use ekubo::interfaces::erc20::IERC20Dispatcher;
 use ekubo::interfaces::positions::IPositionsDispatcher;
 use ekubo::interfaces::router::IRouterDispatcher;
+use starknet::ContractAddress;
 use crate::constants::WORLD_RESOURCE;
+use crate::events::bridge::{PurchaseCancelledTrait, PurchaseInitiatedTrait, PurchaseSettledTrait};
 use crate::events::claimed::ClaimedTrait;
 use crate::events::purchased::PurchasedTrait;
 use crate::events::started::StartedTrait;
 use crate::events::vault::{VaultClaimedTrait, VaultPaidTrait};
 use crate::interfaces::vrf::IVrfProviderDispatcher;
-use crate::models::index::{Config, Game, VaultInfo, VaultPosition};
+use crate::models::index::{BridgeNonce, Config, Game, PendingPurchase, VaultInfo, VaultPosition};
 use crate::systems::token::{ITokenDispatcher, NAME as TOKEN};
 use crate::systems::vault::{IVaultDispatcher, NAME as VAULT};
 
@@ -124,6 +126,36 @@ pub impl StoreImpl of StoreTrait {
         self.world.write_model(position)
     }
 
+    // PendingPurchase
+
+    fn pending_purchase(self: @Store, message_id: felt252) -> PendingPurchase {
+        self.world.read_model(message_id)
+    }
+
+    fn set_pending_purchase(mut self: Store, pending: @PendingPurchase) {
+        self.world.write_model(pending)
+    }
+
+    // BridgeNonce
+
+    fn bridge_nonce(self: @Store) -> BridgeNonce {
+        self.world.read_model(WORLD_RESOURCE)
+    }
+
+    fn set_bridge_nonce(mut self: Store, nonce: @BridgeNonce) {
+        self.world.write_model(nonce)
+    }
+
+    fn next_bridge_nonce(mut self: Store) -> u64 {
+        let mut nonce = self.bridge_nonce();
+        nonce.next += 1;
+        let new_value = nonce.next;
+        // Ensure singleton key
+        nonce.world_resource = WORLD_RESOURCE;
+        self.world.write_model(@nonce);
+        new_value
+    }
+
     // Events
 
     fn claimed(mut self: Store, player_id: felt252, game_id: u64, reward: u128) {
@@ -155,6 +187,28 @@ pub impl StoreImpl of StoreTrait {
 
     fn vault_claimed(mut self: Store, user: felt252, amount: u256) {
         let event = VaultClaimedTrait::new(user, amount);
+        self.world.emit_event(@event);
+    }
+
+    fn purchase_initiated(
+        mut self: Store,
+        message_id: felt252,
+        nonce: u64,
+        recipient: ContractAddress,
+        bundle_id: u32,
+        quantity: u32,
+    ) {
+        let event = PurchaseInitiatedTrait::new(message_id, nonce, recipient, bundle_id, quantity);
+        self.world.emit_event(@event);
+    }
+
+    fn purchase_settled(mut self: Store, message_id: felt252, multiplier: u128, price: u256) {
+        let event = PurchaseSettledTrait::new(message_id, multiplier, price);
+        self.world.emit_event(@event);
+    }
+
+    fn purchase_cancelled(mut self: Store, message_id: felt252, multiplier_used: u128) {
+        let event = PurchaseCancelledTrait::new(message_id, multiplier_used);
         self.world.emit_event(@event);
     }
 }

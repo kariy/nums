@@ -49,3 +49,34 @@ pub struct VaultClaimed {
     pub amount: u256,
     pub time: u64,
 }
+
+#[derive(Copy, Drop, Serde)]
+#[dojo::event]
+pub struct PurchaseInitiated {
+    #[key]
+    pub message_id: felt252,
+    pub nonce: u64,
+    pub recipient: starknet::ContractAddress,
+    pub bundle_id: u32,
+    pub quantity: u32,
+    pub time: u64,
+}
+
+#[derive(Copy, Drop, Serde)]
+#[dojo::event]
+pub struct PurchaseSettled {
+    #[key]
+    pub message_id: felt252,
+    pub multiplier: u128,
+    pub price: u256,
+    pub time: u64,
+}
+
+#[derive(Copy, Drop, Serde)]
+#[dojo::event]
+pub struct PurchaseCancelled {
+    #[key]
+    pub message_id: felt252,
+    pub multiplier_used: u128,
+    pub time: u64,
+}
