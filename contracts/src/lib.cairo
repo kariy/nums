@@ -8,6 +8,7 @@ pub mod systems {
     pub mod faucet;
     pub mod governor;
     pub mod play;
+    pub mod settler;
     pub mod setup;
     pub mod token;
     pub mod treasury;
@@ -73,6 +74,7 @@ pub mod types {
 pub mod interfaces {
     pub mod erc20;
     pub mod erc721;
+    pub mod messaging;
     pub mod vrf;
 }
 
@@ -140,6 +142,7 @@ pub mod mocks {
 #[cfg(test)]
 pub mod tests {
     pub mod setup;
+    pub mod test_settler;
     pub mod test_setup;
 }
 

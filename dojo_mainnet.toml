@@ -20,15 +20,36 @@ order_inits = [
   "NUMS-Play",
   "NUMS-Collection",
   "NUMS-Vault",
+  "NUMS-Settler",
 ]
 skip_contracts = ["NUMS-Vrf", "NUMS-Faucet"]
 disable_multicall = true
 
 [writers]
-"NUMS" = ["NUMS-Setup", "NUMS-Play"]
+"NUMS" = ["NUMS-Setup", "NUMS-Play", "NUMS-Settler"]
 
 [owners]
 "NUMS" = ["NUMS-Collection", "NUMS-Vault", "NUMS-Token"]
+
+# -----------------------------------------------------------------------------
+# Post-migration role grants (manual, NOT automated by `sozo migrate`)
+# -----------------------------------------------------------------------------
+# After `NUMS-Settler` is deployed, the operator MUST grant the following so
+# Settler.settle can run swap+burn+vault.pay:
+#
+#   1. Vault PROVIDER_ROLE → NUMS-Settler
+#        Required by `IVault.pay` (vault.cairo:289).
+#        Treasury holds DEFAULT_ADMIN_ROLE on Vault and can grant via timelock.
+#
+#   2. Token burn authorization → NUMS-Settler
+#        Required by `IToken.burn` (token.cairo:125-128).
+#        Today only the Setup contract can burn. Add Settler as an authorized
+#        burner (either lift the open burn-anyone-with-role pattern or grant a
+#        new role); coordinate with Lane B / token.cairo refactor.
+#
+# Both grants happen via Treasury timelock proposals (production-correct) or
+# admin direct calls during initial bring-up.
+# -----------------------------------------------------------------------------
 
 [init_call_args]
 "NUMS-Vault" = [
@@ -61,4 +82,9 @@ disable_multicall = true
   "0x56a4c",                                                            # pool_tick_spacing,
   "0x043e4f09c32d13d43a880e85f69f7de93ceda62d6cf2581a582c6db635548fdc", # pool_extension,
   "0x005974abf73ca39b2c71a5e9459590f50649e53b296e747d2fc414bbd8839aab", # bundle_allower
+]
+"NUMS-Settler" = [
+  "0x0", # piltover_messaging — Piltover messaging contract on Starknet (filled after Katana deploy)
+  "0x0", # katana_setup        — Katana Setup contract address (filled after Katana deploy)
+  "0x0", # materializer        — Katana Materializer contract address (filled after Katana deploy)
 ]
