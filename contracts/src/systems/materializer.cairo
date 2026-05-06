@@ -22,7 +22,7 @@ pub trait ISetupMaterialize<T> {
 /// point and is the single authorized caller of `Setup.materialize_pending`.
 #[starknet::contract]
 pub mod Materializer {
-    use starknet::ContractAddress;
+    use starknet::{ContractAddress, get_caller_address};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use super::{ISetupMaterializeDispatcher, ISetupMaterializeDispatcherTrait};
 
@@ -30,6 +30,7 @@ pub mod Materializer {
     struct Storage {
         bridge_settler: ContractAddress,
         setup: ContractAddress,
+        admin: ContractAddress,
     }
 
     #[constructor]
@@ -38,6 +39,10 @@ pub mod Materializer {
     ) {
         self.bridge_settler.write(bridge_settler);
         self.setup.write(setup);
+        // Test-driven: persist the deployer as admin so the bridge_settler
+        // address can be patched post-deploy. Resolves the 3-way circular
+        // dependency between Settler/Setup/Materializer in the e2e harness.
+        self.admin.write(get_caller_address());
     }
 
     #[l1_handler]
@@ -72,6 +77,22 @@ pub mod Materializer {
         }
         fn setup(self: @ContractState) -> ContractAddress {
             self.setup.read()
+        }
+    }
+
+    /// Test-driven admin surface — see constructor for rationale.
+    #[abi(per_item)]
+    #[generate_trait]
+    pub impl AdminImpl of AdminTrait {
+        #[external(v0)]
+        fn set_bridge_settler(ref self: ContractState, bridge_settler: ContractAddress) {
+            assert(get_caller_address() == self.admin.read(), 'Materializer: not admin');
+            self.bridge_settler.write(bridge_settler);
+        }
+        #[external(v0)]
+        fn set_setup(ref self: ContractState, setup: ContractAddress) {
+            assert(get_caller_address() == self.admin.read(), 'Materializer: not admin');
+            self.setup.write(setup);
         }
     }
 }

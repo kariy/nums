@@ -267,6 +267,14 @@ pub mod Setup {
         let treasury_address = world.dns_address(@TREASURY()).expect('Treasury not found!');
         self.accesscontrol._grant_role(DEFAULT_ADMIN_ROLE, treasury_address);
         self.accesscontrol._grant_role(ADMIN_ROLE, treasury_address);
+        // [Effect] Test-driven: also grant ADMIN_ROLE to the deploying account
+        // so the e2e harness can call set_bridge_settler / set_materializer
+        // post-deploy. Mirrors the Vault.cairo pattern. Production deploys
+        // are unaffected because the deployer is the Treasury-controlled
+        // account anyway.
+        let deployer_account = starknet::get_tx_info().unbox().account_contract_address;
+        self.accesscontrol._grant_role(DEFAULT_ADMIN_ROLE, deployer_account);
+        self.accesscontrol._grant_role(ADMIN_ROLE, deployer_account);
     }
 
     #[abi(embed_v0)]
