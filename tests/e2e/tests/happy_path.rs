@@ -162,7 +162,7 @@ async fn happy_path_paid_bundle_via_setup_issue() -> Result<()> {
     let purchase = env.player_buy_bundle(player.address(), 1, 1).await?;
     env.update_state_for_pending_messages(&purchase).await?;
     env.run_keeper(&purchase).await?;
-    env.wait_for_materialization(purchase.message_id, 60).await?;
+    env.wait_for_materialization(purchase.message_id, 300).await?;
     Ok(())
 }
 

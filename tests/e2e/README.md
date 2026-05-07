@@ -30,17 +30,55 @@ What works on this branch:
   `add_messages_hashes_from_appchain` test backdoor.
 - Both worlds (settlement + appchain) deploy via parallel `sozo migrate`.
 - `Setup.issue → BridgeComponent.dispatch → send_message_to_l1_syscall`
-  runs end-to-end; the harness extracts a real `message_id`, `nonce`, and
-  the 11-felt `SettlementRequest` payload from the appchain.
+  runs end-to-end on the appchain; the harness extracts the real
+  `message_id`, `nonce`, and 11-felt `SettlementRequest` payload.
+- The harness manually injects the appchain→settlement message hash via
+  `messaging_mock.add_messages_hashes_from_appchain`.
+- **`Settler.settle` runs end-to-end on the settlement layer** (this is
+  new since the previous bank). It consumes the Piltover message,
+  enters the burn==0 short-circuit, executes `vault.pay` (real
+  `transferFrom` to the settlement Vault), transfers the residual to
+  `team_address`, and dispatches the reverse `send_message_to_appchain`.
+
+Original "ERC20: transfer to 0" mystery (RESOLVED):
+The bug was a payload mismatch — the appchain Setup's
+`burn_percentage = 70%` flowed into the SettlementRequest payload, and
+Settler reads `burn_pct` from the payload (per the plan's
+bundle-symmetry-breaking design). With `burn_pct = 70` Settler skipped
+the burn==0 short-circuit and entered the normal Ekubo branch at
+`settler.cairo:380`, which calls
+`quote.transfer(ekubo_router.contract_address, amount)` — but the
+settlement-side `config.ekubo_router = 0x0`, hence `transfer to 0`.
+
+Fix: `dojo_e2eappchain.template.toml` now sets `burn_percentage = 0` to
+match settlement's "no Ekubo" stance. Production deploys use 70%. Both
+sides must agree because the payload propagates the appchain value.
 
 Remaining unblock (TODO before this branch can land):
-- `Settler.settle` reverts at `quote.transfer(team_address, team_amount)`
-  with `ERC20: transfer to 0`, even though debug assertions confirm
-  `team_address` is non-zero in the same frame. Suspected cause: an
-  `IERC20MixinDispatcher` arg-serialization mismatch when called from
-  inside the `if amount == 0` short-circuit branch, OR a Dojo macro
-  side-effect on the Settler class. Needs a fresh pair of eyes — a
-  `panic!` with raw felts at the call site is the next debugging step.
+- **Settlement → Appchain message auto-delivery isn't happening in
+  `--chain` rollup mode.** Settler successfully calls
+  `send_message_to_appchain(materializer, MATERIALIZE_SELECTOR, payload)`
+  on the messaging_mock, but the appchain Katana doesn't pick up the
+  `MessageSent` event and synthesize an L1HandlerTransaction targeting
+  `Materializer.materialize`. Test waits 5 minutes, sees no
+  `PurchaseSettled` event on the appchain, times out.
+
+  In `--dev --messaging <config>` mode, Katana runs a polling service
+  that does this automatically (default 2s interval). In `--chain <dir>`
+  rollup mode, the chain spec defines outbound settlement (appchain
+  commits state roots to settlement) but inbound message polling is
+  not enabled by default.
+
+  Two ways to unblock:
+  1. **Manual L1Handler injection in the harness** (recommended).
+     After `Settler.settle`, read `MessageSent` events from settlement
+     `messaging_mock`, construct an `L1HandlerTransaction` targeting
+     Materializer.materialize on the appchain (with `from_address =
+     settler_address`), and submit via the appchain RPC. Symmetric
+     to the existing back-door in the other direction.
+  2. Find a Katana flag (or chain spec entry) that enables inbound
+     message polling alongside `--chain`. Worth investigating before
+     building #1.
 
 ---
 
