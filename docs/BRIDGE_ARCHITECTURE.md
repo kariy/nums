@@ -86,8 +86,8 @@ graph TB
   K_Materializer -->|materialize_pending| K_Setup
   K_Setup -->|create| K_Play
 
-  M_Setup -.purchase.execute inline.- M_Purchase
-  M_Purchase -.swap+burn+pay synchronously.- M_Ekubo
+  M_Setup -.->|"purchase.execute inline"| M_Purchase
+  M_Purchase -.->|"swap + burn + pay synchronously"| M_Ekubo
 ```
 
 Notes on the diagram:
