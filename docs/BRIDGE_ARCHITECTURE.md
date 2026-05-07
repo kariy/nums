@@ -36,8 +36,8 @@ graph TB
   end
 
   subgraph Bridge["Piltover messaging plane (cross-chain)"]
-    P_AppToSn[(Appchain to SN<br/>SettlementRequest payload<br/>11 felts)]
-    P_SnToApp[(SN to Appchain<br/>MaterializationResult payload<br/>7 felts<br/>selector!('materialize'))]
+    P_AppToSn[("Appchain to SN<br/>SettlementRequest payload<br/>11 felts")]
+    P_SnToApp[("SN to Appchain<br/>MaterializationResult payload<br/>7 felts<br/>selector!('materialize')")]
   end
 
   subgraph Mainnet["Starknet mainnet"]
@@ -78,7 +78,7 @@ graph TB
   M_Vault -->|transferFrom| M_USDC
   M_Settler -->|transfer remainder| M_Team
   M_Treasury -->|deposit_reserve / withdraw_reserve / setters| M_Settler
-  M_Settler -->|send_message_to_appchain<br/>selector!('materialize')| M_Piltover
+  M_Settler -->|"send_message_to_appchain<br/>selector!('materialize')"| M_Piltover
 
   M_Piltover --> P_SnToApp
   P_SnToApp --> K_Piltover
