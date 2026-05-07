@@ -149,5 +149,6 @@ pub mod tests {
     pub mod test_materializer;
     pub mod test_settler;
     pub mod test_setup;
+    pub mod test_transfer_isolation;
 }
 
