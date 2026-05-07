@@ -246,6 +246,90 @@ this test scenario — defer fixing until a test relies on forked state.
   was skipped — check the harness `start()` ordering.
 - **`Out of range ...`** in `player_buy_bundle`: see the
   Setup.issue limitation above. Use `inject_synthetic_purchase` instead.
+- **`ERC20: transfer to 0` inside Settler.settle:** read the case study
+  below before assuming `team_address` is the problem.
+
+### Case study: the May 2026 "transfer to 0" bug
+
+`feat/katana-init-rollup`'s full-flow e2e (`happy_path_paid_bundle_via_setup_issue`)
+reverted with `ERC20: transfer to 0`. The bug looked like the team
+transfer at `settler.cairo:331` was sending to a zero `team_address`,
+but the actual cause was **a payload-config mismatch** that pushed Settler
+into a different branch entirely. Three iterations to find it:
+
+1. Added `assert(team_address.is_non_zero(), 'DBG zero')` right above the
+   team transfer. Test reran: same revert, no debug message. team_address
+   was fine.
+2. Wrote `contracts/src/tests/test_transfer_isolation.cairo` — validates
+   `IERC20MixinDispatcher.transfer` for both EOA→Faucet and contract→Faucet.
+   Both passed. Dispatcher was fine.
+3. Replaced the assert with `panic!('PROBE …', team, quote, ...)`. Panic
+   *also* didn't fire. That meant **Settler wasn't entering the burn==0
+   branch at all** — it was entering the normal Ekubo swap branch. With
+   `burn_percentage` coming from the payload (= appchain config = 70%) and
+   the settlement-side `ekubo_router = 0x0`, Settler called
+   `quote.transfer(0x0, amount)` at `settler.cairo:383` and that's where
+   the "transfer to 0" originated. The "0" was the ekubo_router, not
+   the team.
+
+Fix: `dojo_e2eappchain.template.toml` now has `burn_percentage = 0` to
+match settlement's "no Ekubo" config. **Both sides must agree on
+`burn_percentage`**, because the payload propagates the appchain value
+to the mainnet Settler. See `docs/BRIDGE_ARCHITECTURE.md` §5
+"Cross-chain config matrix and the 'transfer to 0' trap" for the full
+table of which fields propagate.
+
+### Diagnostic playbook for similar future bugs
+
+When `Settler.settle` reverts in a way that doesn't immediately make sense:
+
+1. **Don't trust the revert reason at face value.** `ERC20: transfer to 0`
+   can come from the team transfer, the Ekubo router transfer, or a
+   `transferFrom` inside `vault.pay`. Each is a different `transfer`
+   call site.
+2. **Confirm which branch is taken.** Add `panic!('BRANCH burn_zero')`
+   or `panic!('BRANCH ekubo')` at the top of each branch in
+   `Settler.settle`. The unfired panic identifies the live branch.
+3. **Dump the payload values Settler decoded.** A `panic!('PAYLOAD …',
+   nonce, burn_pct, ...)` right after `decode_settlement_payload`
+   reveals whether the payload matches what `BridgeComponent.dispatch`
+   was supposed to send.
+4. **Run `scarb test` on `test_transfer_isolation`.** ~10 seconds. Rules
+   out the dispatcher / ERC20 component independent of the bridge.
+5. **Read the mainnet Config directly.** Don't assume `sozo migrate`
+   wrote what `dojo_*.toml` says — use a Dojo store query and verify.
+
+### Adding panic probes — quick recipe
+
+Cairo's `panic!` macro accepts format strings. Probes always fire:
+
+```cairo
+let team_felt: felt252 = team_address.into();
+let quote_felt: felt252 = config.quote.into();
+panic!(
+    "PROBE branch=burn0 team={} quote={} amount_lo={}",
+    team_felt,
+    quote_felt,
+    team_amount.low.into(),
+);
+```
+
+Run `scarb build` then run the e2e test. The full panic message lands
+in the test failure output as the revert reason. Remove the probe before
+committing.
+
+### Cross-chain config invariants you must respect
+
+The most consequential payload-propagated values:
+
+| Field | Where to set it | Mainnet prerequisite |
+|---|---|---|
+| `burn_percentage` | appchain Setup `dojo_init` | mainnet `ekubo_router`, `pool_*` set to a real Ekubo deployment with NUMS/USDC liquidity (when burn_pct > 0) |
+| `vault_percentage` | appchain Setup `dojo_init` | mainnet Vault has non-zero `total_supply` (someone has deposited NUMS) |
+| `target_supply` | appchain Setup `dojo_init` | should track mainnet's actual NUMS supply growth |
+| `bundle.price`, `base_price` | appchain bundle registration / `entry_price` | consistent across worlds, otherwise pack_multiplier math drifts |
+
+For test environments without Ekubo, **`burn_percentage` MUST be 0 on both sides**. The harness sets this in `dojo_e2eappchain.template.toml` and `dojo_e2esettlement.toml` — don't change one without the other.
 
 ---
 

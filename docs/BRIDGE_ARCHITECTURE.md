@@ -326,7 +326,81 @@ sequenceDiagram
 
 ---
 
-## 5. File pointers
+## 5. Cross-chain config matrix and the "transfer to 0" trap
+
+Per invariant #5, Settler reads economic values from the **payload**, not from its own mainnet `Config`. This means appchain-side config values *propagate* to mainnet behaviour through the SettlementRequest payload. Most cross-chain bugs come from a mismatch between what the appchain puts in the payload and what the mainnet side can support.
+
+### Which fields flow through the payload (appchain → Settler)
+
+| Payload field | Source on appchain | What Settler does with it |
+|---|---|---|
+| `nonce` | `BridgeNonce` (per-Setup counter) | Hash-uniqueness only — not economic |
+| `recipient` | `Setup.issue` arg | `recipient_felt` for `vault.pay(player_id, ...)` |
+| `quantity` | `Setup.issue` arg | `total_usdc = price × quantity` |
+| `price` | `bundle.price` (registered on appchain) | `total_usdc`, `pack_multiplier` |
+| `base_price` | appchain `config.base_price` (= `entry_price` in dojo_init) | `pack_multiplier = price / base_price + 1` |
+| `burn_percentage` | appchain `config.burn_percentage` | **Branch decision**: `amount = qty × pack_mult × base_price × burn_pct / 100`; `amount == 0` → short-circuit, `> 0` → Ekubo swap |
+| `vault_percentage` | appchain `config.vault_percentage` | Splits residual: `vault_amount = working_residual × vault_pct / 100` |
+| `target_supply` | appchain `config.target_supply` | `Rewarder::multiplier(...)` |
+
+### Which fields Settler reads from its OWN (mainnet) Config
+
+| mainnet Config field | What it controls |
+|---|---|
+| `quote` | The USDC contract address Settler `transfer`s to |
+| `team_address` | Where residual USDC goes after burn + vault.pay |
+| `ekubo_router` / `pool_*` | Used **only** when `burn_percentage > 0` |
+| `ekubo_positions` | Used by Treasury.collect_fees, not Settler |
+| `average_score` / `average_weigth` / `slot_count` | Multiplier formula (slow-moving, fine to read locally) |
+
+### The branch invariant (where the bug lurks)
+
+`Settler.settle` decides between two paths based on the **payload's** `burn_percentage`:
+
+| Branch | Condition | What it calls |
+|---|---|---|
+| **burn==0 short-circuit** | `amount == 0` (i.e. `burn_pct == 0`) | `vault.pay` + `quote.transfer(team_address, ...)` only |
+| **Normal Ekubo path** | `amount > 0` | `quote.transfer(ekubo_router, ...)` → `Router.swap` → `Clearer.clear_*` → `Token.burn` → `vault.pay` → `quote.transfer(team_address, ...)` |
+
+**The Ekubo path requires the mainnet Config's `ekubo_router` to be a real contract.** If the appchain payload says `burn_pct = 70%` and the mainnet `ekubo_router == 0x0`, Settler enters the Ekubo branch and the very first call in it is `quote.transfer(0x0, amount)` — which the Faucet/USDC's ERC-20 component reverts with `ERC20: transfer to 0`.
+
+The recipient that's "0" is the **Ekubo router**, not the team. This is counterintuitive because `transfer to 0` reads like "the team_address is missing".
+
+### Case study: the May 2026 e2e bug
+
+The full-flow e2e test on `feat/katana-init-rollup` failed with `ERC20: transfer to 0` inside `Settler.settle`. Three iterations of debug:
+
+1. **Hypothesis 1** (wrong): `team_address` is somehow zero in Settler's frame. Added `assert(team_address.is_non_zero())` right before the team transfer in the burn==0 branch. Test reran and produced the same revert reason — but the assert *didn't fire*, meaning team_address was fine.
+
+2. **Hypothesis 2** (wrong): `IERC20MixinDispatcher.transfer` has a calldata-serialization quirk for contract-to-contract calls. Wrote `contracts/src/tests/test_transfer_isolation.cairo` to validate the dispatcher in isolation (both EOA→Faucet and contract→Faucet via the dispatcher). Both tests passed. Dispatcher ruled out.
+
+3. **Hypothesis 3** (correct): the team transfer was *never reached*. Replaced the assert with a `panic!()` that always fires with raw values. Test reran — the panic also didn't fire. That meant Settler wasn't even entering the burn==0 branch. With `burn_percentage` coming from the payload (= appchain config = 70%), Settler went through the normal Ekubo branch and reverted at the very first `quote.transfer(ekubo_router, ...)` because the settlement-side `ekubo_router == 0x0`.
+
+The bug was a **two-config mismatch**: appchain `dojo_e2eappchain.template.toml` had `burn_percentage = 70%` (production-shaped), but settlement `dojo_e2esettlement.toml` had `ekubo_router = 0x0` (no Ekubo deployed in this test). Fixed by setting both to `burn_percentage = 0` so the payload propagates 0 and Settler takes the short-circuit.
+
+### Diagnostic playbook for any future "settle reverts" bug
+
+When `Settler.settle` reverts and you don't know where:
+
+1. **Don't trust the revert reason at face value.** "ERC20: transfer to 0" can mean any one of: team transfer, Ekubo router transfer, or a vault.pay-internal `transferFrom`. The selector tells you `transfer` vs `transfer_from` but not *which* `transfer` site.
+2. **Confirm which branch is taken.** Add a `panic!('BRANCH burn_zero')` or `panic!('BRANCH ekubo')` at the top of each branch in `Settler.settle`. Run once. The unfired panic identifies the live branch.
+3. **Dump the payload values Settler actually decoded.** Add a `panic!('PAYLOAD nonce={} burn_pct={} ...', ...)` right after `decode_settlement_payload`. Compare against what `BridgeComponent.dispatch` claims it sent.
+4. **Run `contracts/src/tests/test_transfer_isolation.cairo`.** ~10 seconds. Rules out dispatcher / ERC20 component issues independent of the bridge.
+5. **Read the mainnet Config out of the world.** Verify `ekubo_router`, `team_address`, `quote`, `vault_percentage` etc. all match what `dojo_*.toml` says. Don't assume sozo migrate ran the values you intended.
+
+### Production deploy checklist (cross-chain config consistency)
+
+When changing any payload-propagated field on the appchain:
+
+- [ ] `burn_percentage` on appchain — does mainnet have `ekubo_router`, `pool_extension`, `pool_fee`, `pool_tick_spacing`, `pool_sqrt` all set to a valid Ekubo deployment with NUMS/USDC liquidity?
+- [ ] `vault_percentage` on appchain — does mainnet `Vault` have non-zero `total_supply` (i.e. someone has deposited)? Otherwise `RewardableComponent::pay` reverts with `Rewardable: vault is empty`.
+- [ ] `target_supply` on appchain — does this match mainnet's actual NUMS supply growth path? A wildly-off `target_supply` distorts `Rewarder::multiplier`.
+- [ ] `base_price` and `bundle.price` — must be consistent between the two worlds, otherwise pack_multiplier math drifts and burn amounts go wrong.
+- [ ] After any change, run the e2e harness end-to-end at least once before promoting.
+
+---
+
+## 6. File pointers
 
 - Mainnet Settler: `contracts/src/systems/settler.cairo`
 - Appchain Setup: `contracts/src/systems/setup.cairo`
