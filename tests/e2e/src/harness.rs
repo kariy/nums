@@ -45,12 +45,14 @@ use tracing::{debug, info, warn};
 
 use crate::constants::{
     APPCHAIN_CHAIN_ID_STR, DEV_ACCOUNT_0_ADDRESS, DEV_ACCOUNT_0_PRIVKEY,
-    PILTOVER_CANCELLATION_DELAY_SECS,
 };
 use crate::katana::{assert_dev_account_matches, KatanaNode};
 use crate::messaging::{
-    add_messages_hashes_from_appchain, assert_messaging_test_feature_present,
-    declare_and_deploy_messaging_mock, wait_for_tx_success, write_messaging_config,
+    add_messages_hashes_from_appchain, wait_for_tx_success,
+};
+use crate::rollup::{
+    assert_test_backdoor_present, init_rollup, upgrade_appchain_to_test_class,
+    write_appchain_profile_toml,
 };
 use crate::sozo::{
     assert_sozo_runnable, build as sozo_build, migrate as sozo_migrate, read_manifest,
@@ -133,7 +135,7 @@ impl TestEnv {
         let repo_root = repo_root()?;
         info!("Repo root: {}", repo_root.display());
 
-        // 1. Settlement Katana (forking Cartridge mainnet).
+        // 1. Settlement Katana (--dev, optionally forks Cartridge mainnet).
         let settlement = KatanaNode::start_settlement(None).await?;
         assert_dev_account_matches(&settlement.rpc_url(), DEV_ACCOUNT_0_ADDRESS).await?;
 
@@ -145,57 +147,83 @@ impl TestEnv {
         let settlement_account_priv = DEV_ACCOUNT_0_PRIVKEY;
         info!("Settlement chain_id: {settlement_chain_id:#x}");
 
-        // 2. Declare + deploy messaging_mock on settlement.
+        // 2. `katana init rollup` — declares + deploys a Piltover Appchain
+        //    contract on settlement, configures program_info / facts_registry
+        //    and writes config.toml + genesis.json into `<tmp>/chain/`.
+        //    Output is the chain spec the appchain Katana later starts with
+        //    via `--chain`.
+        let chain_dir = temp.path().join("chain");
+        std::fs::create_dir_all(&chain_dir).context("create chain config dir")?;
+        let rollup = init_rollup(
+            APPCHAIN_CHAIN_ID_STR,
+            &settlement.rpc_url(),
+            settlement_account_addr,
+            settlement_account_priv,
+            // Facts registry placeholder — non-zero so init's set_facts_registry
+            // call succeeds. The value isn't load-bearing because we never
+            // call update_state() (we use the messaging_test back-door).
+            Felt::ONE,
+            &chain_dir,
+        )
+        .await
+        .context("katana init rollup")?;
+        let messaging_mock = rollup.core_contract;
+        info!(
+            "katana init rollup: core_contract={messaging_mock:#x}, deployed_block={}, genesis_account={addr:#x}",
+            rollup.deployed_block,
+            addr = rollup.appchain_account.address,
+        );
+
+        // 3. Upgrade the deployed Appchain to a class compiled with the
+        //    `messaging_test` feature flag, so we can register Appchain→
+        //    Settlement message hashes manually via
+        //    `add_messages_hashes_from_appchain` (the saya/SP1 stand-in).
+        //    OZ upgradeable preserves storage; the program_info / fact
+        //    registry / messaging state set by `katana init rollup` carry
+        //    over, so the appchain Katana's startup validation still passes.
         let provider = Self::provider(&settlement.rpc_url())?;
-        let account = build_account(
+        let settlement_acct = build_account(
             provider,
             settlement_chain_id,
             settlement_account_addr,
             settlement_account_priv,
         );
-
-        let messaging_mock_artifact = artifact_path("messaging_mock.contract_class.json");
-        if !messaging_mock_artifact.exists() {
+        let appchain_with_test_artifact = artifact_path("appchain_with_test.contract_class.json");
+        if !appchain_with_test_artifact.exists() {
             bail!(
                 "missing artifact at {} — run bin/integration-test-setup",
-                messaging_mock_artifact.display()
+                appchain_with_test_artifact.display()
             );
         }
-        let messaging_mock = declare_and_deploy_messaging_mock(
-            &account,
-            &messaging_mock_artifact,
-            PILTOVER_CANCELLATION_DELAY_SECS,
+        upgrade_appchain_to_test_class(
+            &settlement_acct,
+            &appchain_with_test_artifact,
+            messaging_mock,
         )
         .await
-        .context("deploy messaging_mock")?;
+        .context("upgrade Piltover Appchain to messaging_test class")?;
+        assert_test_backdoor_present(settlement_acct.provider(), messaging_mock).await?;
+        info!("messaging_test back-door confirmed on core_contract={messaging_mock:#x}");
 
-        assert_messaging_test_feature_present(account.provider(), messaging_mock).await?;
-        info!("Piltover messaging_mock deployed at {messaging_mock:#x}");
+        // 4. Render the appchain dojo profile from its template, substituting
+        //    the genesis-allocated account that `katana init rollup` baked
+        //    into genesis.json (the only pre-funded account on the appchain).
+        write_appchain_profile_toml(
+            &repo_root,
+            "dojo_e2eappchain.template.toml",
+            "dojo_e2eappchain.toml",
+            &rollup.appchain_account,
+        )
+        .context("render dojo_e2eappchain.toml")?;
 
-        // 3. Write messaging config + start appchain Katana.
-        let messaging_config_path = temp.path().join("messaging.json");
-        let from_block = account
-            .provider()
-            .block_number()
-            .await
-            .context("read settlement block number")?;
-        write_messaging_config(
-            &messaging_config_path,
-            &settlement.rpc_url(),
-            messaging_mock,
-            from_block,
-        )?;
-        info!(
-            "Appchain messaging config written to {}",
-            messaging_config_path.display()
-        );
-
-        let appchain = KatanaNode::start_appchain(Some(&messaging_config_path)).await?;
-        assert_dev_account_matches(&appchain.rpc_url(), DEV_ACCOUNT_0_ADDRESS).await?;
+        // 5. Start the appchain Katana as a `ChainSpec::Rollup` (is_l3=true).
+        //    Messaging is auto-derived from the chain spec's settlement
+        //    section — no `--messaging` flag.
+        let appchain = KatanaNode::start_appchain_rollup(&chain_dir).await?;
 
         let appchain_chain_id = chain_id_felt(APPCHAIN_CHAIN_ID_STR)?;
-        let appchain_account_addr = DEV_ACCOUNT_0_ADDRESS;
-        let appchain_account_priv = DEV_ACCOUNT_0_PRIVKEY;
+        let appchain_account_addr = rollup.appchain_account.address;
+        let appchain_account_priv = rollup.appchain_account.private_key;
 
         // 4. Build both profiles serially (target/ races otherwise).
         info!("sozo build (e2eappchain) ...");

@@ -14,6 +14,34 @@ The contracts under test live in `contracts/src/...` —
 small, test-driven additions to that contract code are documented in the
 "Test-driven contract changes" section below.
 
+## Branch status: `feat/katana-init-rollup`
+
+This branch is **exploratory / WIP** — it is **not** merged to `main`. It
+proves that the 160-bit `EthAddress` blocker (documented in v1's known
+gap) is solvable by replacing `katana --dev` with a proper rollup chain
+spec via `katana init rollup`.
+
+What works on this branch:
+- `katana init rollup` produces a chain spec with `is_l3 = true`, allowing
+  `send_message_to_l1_syscall` to target a 251-bit Starknet address.
+- The auto-deployed Piltover Appchain core contract is upgraded in-place
+  to a class compiled with the `messaging_test` feature, preserving its
+  `program_info`/`fact_registry` storage but adding the
+  `add_messages_hashes_from_appchain` test backdoor.
+- Both worlds (settlement + appchain) deploy via parallel `sozo migrate`.
+- `Setup.issue → BridgeComponent.dispatch → send_message_to_l1_syscall`
+  runs end-to-end; the harness extracts a real `message_id`, `nonce`, and
+  the 11-felt `SettlementRequest` payload from the appchain.
+
+Remaining unblock (TODO before this branch can land):
+- `Settler.settle` reverts at `quote.transfer(team_address, team_amount)`
+  with `ERC20: transfer to 0`, even though debug assertions confirm
+  `team_address` is non-zero in the same frame. Suspected cause: an
+  `IERC20MixinDispatcher` arg-serialization mismatch when called from
+  inside the `if amount == 0` short-circuit branch, OR a Dojo macro
+  side-effect on the Settler class. Needs a fresh pair of eyes — a
+  `panic!` with raw felts at the call site is the next debugging step.
+
 ---
 
 ## Prerequisites
