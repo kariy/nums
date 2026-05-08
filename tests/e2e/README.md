@@ -16,10 +16,10 @@ small, test-driven additions to that contract code are documented in the
 
 ## Branch status: `feat/katana-init-rollup`
 
-This branch is **exploratory / WIP** — it is **not** merged to `main`. It
-proves that the 160-bit `EthAddress` blocker (documented in v1's known
-gap) is solvable by replacing `katana --dev` with a proper rollup chain
-spec via `katana init rollup`.
+This branch is **WIP** — it is **not** merged to `main`. It closes the
+160-bit `EthAddress` blocker documented in v1's known gap by replacing
+`katana --dev` with a proper rollup chain spec via `katana init rollup`,
+and the full happy-path bridge test passes end-to-end.
 
 What works on this branch:
 - `katana init rollup` produces a chain spec with `is_l3 = true`, allowing
@@ -29,56 +29,70 @@ What works on this branch:
   `program_info`/`fact_registry` storage but adding the
   `add_messages_hashes_from_appchain` test backdoor.
 - Both worlds (settlement + appchain) deploy via parallel `sozo migrate`.
-- `Setup.issue → BridgeComponent.dispatch → send_message_to_l1_syscall`
-  runs end-to-end on the appchain; the harness extracts the real
-  `message_id`, `nonce`, and 11-felt `SettlementRequest` payload.
-- The harness manually injects the appchain→settlement message hash via
-  `messaging_mock.add_messages_hashes_from_appchain`.
-- **`Settler.settle` runs end-to-end on the settlement layer** (this is
-  new since the previous bank). It consumes the Piltover message,
-  enters the burn==0 short-circuit, executes `vault.pay` (real
-  `transferFrom` to the settlement Vault), transfers the residual to
-  `team_address`, and dispatches the reverse `send_message_to_appchain`.
+- The full happy path runs:
+  ```
+  Setup.issue → BridgeComponent.dispatch → send_message_to_l1_syscall
+  → harness injects message hash via messaging_test back-door
+  → Settler.settle (consume + burn==0 short-circuit + vault.pay + team transfer)
+  → Settler.send_message_to_appchain (reverse Piltover message)
+  → Katana --chain auto-polls settlement, picks up MessageSent
+  → L1Handler tx targets Materializer.materialize
+  → Setup.materialize_pending → play.create
+  → PurchaseSettled event observed on appchain
+  ```
 
-Original "ERC20: transfer to 0" mystery (RESOLVED):
-The bug was a payload mismatch — the appchain Setup's
-`burn_percentage = 70%` flowed into the SettlementRequest payload, and
-Settler reads `burn_pct` from the payload (per the plan's
-bundle-symmetry-breaking design). With `burn_pct = 70` Settler skipped
-the burn==0 short-circuit and entered the normal Ekubo branch at
-`settler.cairo:380`, which calls
+Run with:
+```sh
+NUMS_E2E_NO_FORK=1 cargo test --manifest-path tests/e2e/Cargo.toml \
+  --release happy_path_paid_bundle_via_setup_issue \
+  -- --nocapture --test-threads=1
+```
+~10 minutes wall-clock, dominated by parallel `sozo migrate` of both worlds.
+
+Two non-obvious bugs were chased down to land this:
+
+### Bug #1 (RESOLVED): "ERC20: transfer to 0" in Settler.settle
+
+A payload-config mismatch. The appchain Setup's `burn_percentage = 70%`
+flowed into the SettlementRequest payload, and Settler reads `burn_pct`
+from the payload (per the bundle-symmetry-breaking design). With
+`burn_pct = 70` Settler entered the normal Ekubo branch at
+`settler.cairo:380` which calls
 `quote.transfer(ekubo_router.contract_address, amount)` — but the
 settlement-side `config.ekubo_router = 0x0`, hence `transfer to 0`.
 
+Counterintuitive trap: the "0" recipient is the **Ekubo router**, not the
+team_address. The team transfer is a hundred lines down in the same
+function. Debug asserts on `team_address` will pass even though
+"transfer to 0" reads like "team_address is missing".
+
 Fix: `dojo_e2eappchain.template.toml` now sets `burn_percentage = 0` to
-match settlement's "no Ekubo" stance. Production deploys use 70%. Both
-sides must agree because the payload propagates the appchain value.
+match settlement's "no Ekubo" stance. **Both sides must agree on
+`burn_percentage`** because the payload propagates the appchain value.
+Production deploys use 70% on the appchain AND have a real Ekubo on the
+settlement layer.
 
-Remaining unblock (TODO before this branch can land):
-- **Settlement → Appchain message auto-delivery isn't happening in
-  `--chain` rollup mode.** Settler successfully calls
-  `send_message_to_appchain(materializer, MATERIALIZE_SELECTOR, payload)`
-  on the messaging_mock, but the appchain Katana doesn't pick up the
-  `MessageSent` event and synthesize an L1HandlerTransaction targeting
-  `Materializer.materialize`. Test waits 5 minutes, sees no
-  `PurchaseSettled` event on the appchain, times out.
+### Bug #2 (RESOLVED): "materialization timeout" wasn't a Katana issue
 
-  In `--dev --messaging <config>` mode, Katana runs a polling service
-  that does this automatically (default 2s interval). In `--chain <dir>`
-  rollup mode, the chain spec defines outbound settlement (appchain
-  commits state roots to settlement) but inbound message polling is
-  not enabled by default.
+After fix #1 Settler.settle succeeded, dispatched the reverse Piltover
+message, and Katana's `--chain` mode auto-polled settlement and injected
+the L1Handler tx (verified at the trace level). The L1Handler tx
+**executed cleanly** at the next block, emitting the `PurchaseSettled`
+event from `Setup.materialize_pending`.
 
-  Two ways to unblock:
-  1. **Manual L1Handler injection in the harness** (recommended).
-     After `Settler.settle`, read `MessageSent` events from settlement
-     `messaging_mock`, construct an `L1HandlerTransaction` targeting
-     Materializer.materialize on the appchain (with `from_address =
-     settler_address`), and submit via the appchain RPC. Symmetric
-     to the existing back-door in the other direction.
-  2. Find a Katana flag (or chain spec entry) that enables inbound
-     message polling alongside `--chain`. Worth investigating before
-     building #1.
+The harness's `purchase_was_settled` was filtering for the wrong Starknet
+event-key layout. It expected `keys=[selector!("PurchaseSettled"), message_id]`,
+but Dojo's `world.emit_event(@event)` emits a wrapper:
+```
+keys = [selector!("EventEmitted"), <dojo_event_class_hash>, system_address]
+data = [user_keys_len, message_id, user_values_len, multiplier, price.lo, price.hi, time]
+```
+So `message_id` lives in `data[1]`, not in keys. Fix: filter on
+`EventEmitted` selector + emitter address (Setup), match `data[1]`.
+
+This means **the bridge contracts and Katana messaging service worked
+the entire time** — only the test's detection was wrong. If you write
+a similar test for any other Dojo event, remember the wrapper layout.
 
 ---
 
