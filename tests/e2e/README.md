@@ -14,6 +14,86 @@ The contracts under test live in `contracts/src/...` —
 small, test-driven additions to that contract code are documented in the
 "Test-driven contract changes" section below.
 
+## Branch status: `feat/katana-init-rollup`
+
+This branch is **WIP** — it is **not** merged to `main`. It closes the
+160-bit `EthAddress` blocker documented in v1's known gap by replacing
+`katana --dev` with a proper rollup chain spec via `katana init rollup`,
+and the full happy-path bridge test passes end-to-end.
+
+What works on this branch:
+- `katana init rollup` produces a chain spec with `is_l3 = true`, allowing
+  `send_message_to_l1_syscall` to target a 251-bit Starknet address.
+- The auto-deployed Piltover Appchain core contract is upgraded in-place
+  to a class compiled with the `messaging_test` feature, preserving its
+  `program_info`/`fact_registry` storage but adding the
+  `add_messages_hashes_from_appchain` test backdoor.
+- Both worlds (settlement + appchain) deploy via parallel `sozo migrate`.
+- The full happy path runs:
+  ```
+  Setup.issue → BridgeComponent.dispatch → send_message_to_l1_syscall
+  → harness injects message hash via messaging_test back-door
+  → Settler.settle (consume + burn==0 short-circuit + vault.pay + team transfer)
+  → Settler.send_message_to_appchain (reverse Piltover message)
+  → Katana --chain auto-polls settlement, picks up MessageSent
+  → L1Handler tx targets Materializer.materialize
+  → Setup.materialize_pending → play.create
+  → PurchaseSettled event observed on appchain
+  ```
+
+Run with:
+```sh
+NUMS_E2E_NO_FORK=1 cargo test --manifest-path tests/e2e/Cargo.toml \
+  --release happy_path_paid_bundle_via_setup_issue \
+  -- --nocapture --test-threads=1
+```
+~10 minutes wall-clock, dominated by parallel `sozo migrate` of both worlds.
+
+Two non-obvious bugs were chased down to land this:
+
+### Bug #1 (RESOLVED): "ERC20: transfer to 0" in Settler.settle
+
+A payload-config mismatch. The appchain Setup's `burn_percentage = 70%`
+flowed into the SettlementRequest payload, and Settler reads `burn_pct`
+from the payload (per the bundle-symmetry-breaking design). With
+`burn_pct = 70` Settler entered the normal Ekubo branch at
+`settler.cairo:380` which calls
+`quote.transfer(ekubo_router.contract_address, amount)` — but the
+settlement-side `config.ekubo_router = 0x0`, hence `transfer to 0`.
+
+Counterintuitive trap: the "0" recipient is the **Ekubo router**, not the
+team_address. The team transfer is a hundred lines down in the same
+function. Debug asserts on `team_address` will pass even though
+"transfer to 0" reads like "team_address is missing".
+
+Fix: `dojo_e2eappchain.template.toml` now sets `burn_percentage = 0` to
+match settlement's "no Ekubo" stance. **Both sides must agree on
+`burn_percentage`** because the payload propagates the appchain value.
+Production deploys use 70% on the appchain AND have a real Ekubo on the
+settlement layer.
+
+### Bug #2 (RESOLVED): "materialization timeout" wasn't a Katana issue
+
+After fix #1 Settler.settle succeeded, dispatched the reverse Piltover
+message, and Katana's `--chain` mode auto-polled settlement and injected
+the L1Handler tx (verified at the trace level). The L1Handler tx
+**executed cleanly** at the next block, emitting the `PurchaseSettled`
+event from `Setup.materialize_pending`.
+
+The harness's `purchase_was_settled` was filtering for the wrong Starknet
+event-key layout. It expected `keys=[selector!("PurchaseSettled"), message_id]`,
+but Dojo's `world.emit_event(@event)` emits a wrapper:
+```
+keys = [selector!("EventEmitted"), <dojo_event_class_hash>, system_address]
+data = [user_keys_len, message_id, user_values_len, multiplier, price.lo, price.hi, time]
+```
+So `message_id` lives in `data[1]`, not in keys. Fix: filter on
+`EventEmitted` selector + emitter address (Setup), match `data[1]`.
+
+This means **the bridge contracts and Katana messaging service worked
+the entire time** — only the test's detection was wrong. If you write
+a similar test for any other Dojo event, remember the wrapper layout.
+
 ---
 
 ## Prerequisites

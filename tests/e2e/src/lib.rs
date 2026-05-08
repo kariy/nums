@@ -13,6 +13,7 @@ pub mod constants;
 pub mod harness;
 pub mod katana;
 pub mod messaging;
+pub mod rollup;
 pub mod sozo;
 
 pub use harness::{PendingStatus, PurchaseHandle, TestEnv};

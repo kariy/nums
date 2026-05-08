@@ -45,12 +45,14 @@ use tracing::{debug, info, warn};
 
 use crate::constants::{
     APPCHAIN_CHAIN_ID_STR, DEV_ACCOUNT_0_ADDRESS, DEV_ACCOUNT_0_PRIVKEY,
-    PILTOVER_CANCELLATION_DELAY_SECS,
 };
 use crate::katana::{assert_dev_account_matches, KatanaNode};
 use crate::messaging::{
-    add_messages_hashes_from_appchain, assert_messaging_test_feature_present,
-    declare_and_deploy_messaging_mock, wait_for_tx_success, write_messaging_config,
+    add_messages_hashes_from_appchain, wait_for_tx_success,
+};
+use crate::rollup::{
+    assert_test_backdoor_present, init_rollup, upgrade_appchain_to_test_class,
+    write_appchain_profile_toml,
 };
 use crate::sozo::{
     assert_sozo_runnable, build as sozo_build, migrate as sozo_migrate, read_manifest,
@@ -133,7 +135,7 @@ impl TestEnv {
         let repo_root = repo_root()?;
         info!("Repo root: {}", repo_root.display());
 
-        // 1. Settlement Katana (forking Cartridge mainnet).
+        // 1. Settlement Katana (--dev, optionally forks Cartridge mainnet).
         let settlement = KatanaNode::start_settlement(None).await?;
         assert_dev_account_matches(&settlement.rpc_url(), DEV_ACCOUNT_0_ADDRESS).await?;
 
@@ -145,57 +147,83 @@ impl TestEnv {
         let settlement_account_priv = DEV_ACCOUNT_0_PRIVKEY;
         info!("Settlement chain_id: {settlement_chain_id:#x}");
 
-        // 2. Declare + deploy messaging_mock on settlement.
+        // 2. `katana init rollup` — declares + deploys a Piltover Appchain
+        //    contract on settlement, configures program_info / facts_registry
+        //    and writes config.toml + genesis.json into `<tmp>/chain/`.
+        //    Output is the chain spec the appchain Katana later starts with
+        //    via `--chain`.
+        let chain_dir = temp.path().join("chain");
+        std::fs::create_dir_all(&chain_dir).context("create chain config dir")?;
+        let rollup = init_rollup(
+            APPCHAIN_CHAIN_ID_STR,
+            &settlement.rpc_url(),
+            settlement_account_addr,
+            settlement_account_priv,
+            // Facts registry placeholder — non-zero so init's set_facts_registry
+            // call succeeds. The value isn't load-bearing because we never
+            // call update_state() (we use the messaging_test back-door).
+            Felt::ONE,
+            &chain_dir,
+        )
+        .await
+        .context("katana init rollup")?;
+        let messaging_mock = rollup.core_contract;
+        info!(
+            "katana init rollup: core_contract={messaging_mock:#x}, deployed_block={}, genesis_account={addr:#x}",
+            rollup.deployed_block,
+            addr = rollup.appchain_account.address,
+        );
+
+        // 3. Upgrade the deployed Appchain to a class compiled with the
+        //    `messaging_test` feature flag, so we can register Appchain→
+        //    Settlement message hashes manually via
+        //    `add_messages_hashes_from_appchain` (the saya/SP1 stand-in).
+        //    OZ upgradeable preserves storage; the program_info / fact
+        //    registry / messaging state set by `katana init rollup` carry
+        //    over, so the appchain Katana's startup validation still passes.
         let provider = Self::provider(&settlement.rpc_url())?;
-        let account = build_account(
+        let settlement_acct = build_account(
             provider,
             settlement_chain_id,
             settlement_account_addr,
             settlement_account_priv,
         );
-
-        let messaging_mock_artifact = artifact_path("messaging_mock.contract_class.json");
-        if !messaging_mock_artifact.exists() {
+        let appchain_with_test_artifact = artifact_path("appchain_with_test.contract_class.json");
+        if !appchain_with_test_artifact.exists() {
             bail!(
                 "missing artifact at {} — run bin/integration-test-setup",
-                messaging_mock_artifact.display()
+                appchain_with_test_artifact.display()
             );
         }
-        let messaging_mock = declare_and_deploy_messaging_mock(
-            &account,
-            &messaging_mock_artifact,
-            PILTOVER_CANCELLATION_DELAY_SECS,
+        upgrade_appchain_to_test_class(
+            &settlement_acct,
+            &appchain_with_test_artifact,
+            messaging_mock,
         )
         .await
-        .context("deploy messaging_mock")?;
+        .context("upgrade Piltover Appchain to messaging_test class")?;
+        assert_test_backdoor_present(settlement_acct.provider(), messaging_mock).await?;
+        info!("messaging_test back-door confirmed on core_contract={messaging_mock:#x}");
 
-        assert_messaging_test_feature_present(account.provider(), messaging_mock).await?;
-        info!("Piltover messaging_mock deployed at {messaging_mock:#x}");
+        // 4. Render the appchain dojo profile from its template, substituting
+        //    the genesis-allocated account that `katana init rollup` baked
+        //    into genesis.json (the only pre-funded account on the appchain).
+        write_appchain_profile_toml(
+            &repo_root,
+            "dojo_e2eappchain.template.toml",
+            "dojo_e2eappchain.toml",
+            &rollup.appchain_account,
+        )
+        .context("render dojo_e2eappchain.toml")?;
 
-        // 3. Write messaging config + start appchain Katana.
-        let messaging_config_path = temp.path().join("messaging.json");
-        let from_block = account
-            .provider()
-            .block_number()
-            .await
-            .context("read settlement block number")?;
-        write_messaging_config(
-            &messaging_config_path,
-            &settlement.rpc_url(),
-            messaging_mock,
-            from_block,
-        )?;
-        info!(
-            "Appchain messaging config written to {}",
-            messaging_config_path.display()
-        );
-
-        let appchain = KatanaNode::start_appchain(Some(&messaging_config_path)).await?;
-        assert_dev_account_matches(&appchain.rpc_url(), DEV_ACCOUNT_0_ADDRESS).await?;
+        // 5. Start the appchain Katana as a `ChainSpec::Rollup` (is_l3=true).
+        //    Messaging is auto-derived from the chain spec's settlement
+        //    section — no `--messaging` flag.
+        let appchain = KatanaNode::start_appchain_rollup(&chain_dir).await?;
 
         let appchain_chain_id = chain_id_felt(APPCHAIN_CHAIN_ID_STR)?;
-        let appchain_account_addr = DEV_ACCOUNT_0_ADDRESS;
-        let appchain_account_priv = DEV_ACCOUNT_0_PRIVKEY;
+        let appchain_account_addr = rollup.appchain_account.address;
+        let appchain_account_priv = rollup.appchain_account.private_key;
 
         // 4. Build both profiles serially (target/ races otherwise).
         info!("sozo build (e2eappchain) ...");
@@ -578,30 +606,61 @@ impl TestEnv {
     }
 
     /// Detect whether a `PurchaseSettled` event was emitted on the appchain
-    /// for the given message_id by scanning recent Dojo events emitted from
-    /// the world contract. This is a pragmatic standin for reading the
-    /// `PendingPurchase` model directly — that requires constructing a
-    /// `ModelIndex::Keys` + `Layout` Cairo enum on the JSON-RPC side which
-    /// is non-trivial. The `PurchaseSettled` event has the message_id as
-    /// its first key, so detection is straightforward.
+    /// for the given message_id.
+    ///
+    /// **Dojo event emission detail (this is non-obvious):** `world.emit_event(@event)`
+    /// does NOT emit a Starknet event with the user-defined event selector as
+    /// key[0]. It emits Dojo's wrapper `EventEmitted` with this layout:
+    ///
+    ///   keys   = [selector!("EventEmitted"),
+    ///             <hash of the user event's namespace+name>,
+    ///             system_address (the emitter)]
+    ///   values = [user_keys_len, user_keys..., user_values_len, user_values...]
+    ///
+    /// The user `#[key]` fields (here, `message_id`) live in `data`, NOT in
+    /// the Starknet keys. So we filter on `[EventEmitted, event_class_hash]`
+    /// and inspect `data[1]` (the first user-key, which is `message_id`).
     pub async fn purchase_was_settled(&self, message_id: Felt) -> Result<bool> {
         let world = self.appchain_world.world_address;
+        let setup = self.appchain_world.contract("NUMS-Setup")?;
         let provider = Self::provider(&self.appchain.rpc_url())?;
         use starknet::core::types::{EventFilter, BlockId, BlockTag};
-        let event_selector = get_selector_from_name("PurchaseSettled")
-            .map_err(|e| anyhow!("compute selector: {e}"))?;
+
+        // First Starknet key is always `EventEmitted` for any Dojo-emitted event.
+        let event_emitted = get_selector_from_name("EventEmitted")
+            .map_err(|e| anyhow!("compute EventEmitted: {e}"))?;
 
         let filter = EventFilter {
             from_block: Some(BlockId::Number(0)),
             to_block: Some(BlockId::Tag(BlockTag::PreConfirmed)),
             address: Some(world),
-            keys: Some(vec![vec![event_selector], vec![message_id]]),
+            keys: Some(vec![vec![event_emitted]]),
         };
         let page = provider
-            .get_events(filter, None, 100)
+            .get_events(filter, None, 500)
             .await
-            .context("get_events PurchaseSettled")?;
-        Ok(!page.events.is_empty())
+            .context("get_events EventEmitted")?;
+
+        // Dojo emits PurchaseSettled with this Starknet event layout:
+        //   keys   = [EventEmitted_sel, dojo_event_class_hash, system_address (=Setup)]
+        //   data   = [user_keys_len=1, message_id, user_values_len, multiplier, price.lo, price.hi, time]
+        //
+        // We filter on the emitter being Setup and check data[1] == message_id.
+        // PurchaseInitiated and PurchaseCancelled are also Setup-emitted with
+        // message_id as first user-key, so we additionally look at data[2..]:
+        // PurchaseSettled has user_values_len = 4 (multiplier, price.lo, price.hi, time)
+        // PurchaseInitiated has user_values_len = 5 (nonce, recipient, bundle_id, quantity, time)
+        // PurchaseCancelled has user_values_len = 2 (multiplier_used, time)
+        //
+        // The cheapest invariant that uniquely identifies PurchaseSettled is
+        // checking the third Starknet key (system_address) == Setup AND
+        // data.len() == 7 (1 + 1 + 1 + 4) AND data[1] == message_id.
+        Ok(page.events.iter().any(|e| {
+            e.keys.len() >= 3
+                && e.keys[2] == setup
+                && e.data.len() == 7
+                && e.data[1] == message_id
+        }))
     }
 
     // ------------------------------------------------------------------
@@ -839,6 +898,7 @@ impl TestEnv {
         timeout_secs: u64,
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
+        let mut probed_l1handler = false;
         loop {
             match self.purchase_was_settled(message_id).await {
                 Ok(true) => {
@@ -852,11 +912,78 @@ impl TestEnv {
                     debug!("purchase_was_settled err: {e:#}");
                 }
             }
+            // Once 5 seconds have passed without success, dump any L1Handler
+            // tx receipts targeting the Materializer so we can see whether
+            // they actually executed cleanly.
+            if !probed_l1handler
+                && std::time::Instant::now() > deadline - Duration::from_secs(timeout_secs - 5)
+            {
+                probed_l1handler = true;
+                if let Err(e) = self.dump_l1handler_receipts().await {
+                    info!("dump_l1handler_receipts err: {e:#}");
+                }
+            }
             if std::time::Instant::now() > deadline {
                 bail!("materialization timeout for {message_id:#x}");
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
+    }
+
+    /// Walk the appchain blocks looking for L1Handler transactions and dump
+    /// their receipts. Used to diagnose whether the Materializer L1Handler
+    /// landed but reverted internally.
+    pub async fn dump_l1handler_receipts(&self) -> Result<()> {
+        use starknet::core::types::{
+            BlockId, MaybePreConfirmedBlockWithTxHashes,
+            ExecutionResult, TransactionReceipt, TransactionReceiptWithBlockInfo,
+        };
+        let _ = BlockId::Number; // silence unused-import warning
+        let provider = Self::provider(&self.appchain.rpc_url())?;
+        let latest = provider
+            .block_hash_and_number()
+            .await
+            .context("appchain block_hash_and_number")?;
+        let head = latest.block_number;
+        let from = head.saturating_sub(20);
+        info!("probing appchain blocks {from}..={head} for L1Handler txs");
+        for block_n in from..=head {
+            let block = provider
+                .get_block_with_tx_hashes(BlockId::Number(block_n))
+                .await
+                .map_err(|e| anyhow!("get_block({block_n}): {e}"))?;
+            let tx_hashes = match block {
+                MaybePreConfirmedBlockWithTxHashes::Block(b) => b.transactions,
+                _ => continue,
+            };
+            for tx_hash in tx_hashes {
+                let receipt: TransactionReceiptWithBlockInfo = provider
+                    .get_transaction_receipt(tx_hash)
+                    .await
+                    .map_err(|e| anyhow!("receipt({tx_hash:#x}): {e}"))?;
+                if let TransactionReceipt::L1Handler(r) = &receipt.receipt {
+                    let exec = match &r.execution_result {
+                        ExecutionResult::Succeeded => "SUCCEEDED".to_string(),
+                        ExecutionResult::Reverted { reason } => {
+                            format!("REVERTED: {reason}")
+                        }
+                    };
+                    info!(
+                        "L1Handler tx {tx_hash:#x} (block {block_n}): {exec}; events={ec}",
+                        ec = r.events.len()
+                    );
+                    for (i, ev) in r.events.iter().enumerate() {
+                        info!(
+                            "  event[{i}] from={:#x} keys={:?} data_len={}",
+                            ev.from_address,
+                            ev.keys.iter().map(|k| format!("{k:#x}")).collect::<Vec<_>>(),
+                            ev.data.len()
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn assert_infrastructure_ready(&self) -> Result<()> {

@@ -66,4 +66,18 @@ fi
 mv "${ARTIFACTS}/piltover_messaging_mock.contract_class.json" "${ARTIFACTS}/messaging_mock.contract_class.json"
 mv "${ARTIFACTS}/piltover_messaging_mock.compiled_contract_class.json" "${ARTIFACTS}/messaging_mock.compiled_contract_class.json"
 
+# 4. Piltover Appchain with messaging_test feature. The same `scarb build`
+#    above produces this artifact too — it sits alongside the messaging_mock
+#    in target/dev. Used by the harness to upgrade the auto-deployed core
+#    contract from `katana init rollup` (which is the standard Appchain
+#    without the test backdoor) to one that exposes
+#    `add_messages_hashes_from_appchain` for manual hash injection.
+cp "${PILTOVER_DIR}/target/dev/piltover_appchain.contract_class.json" "${ARTIFACTS}/appchain_with_test.contract_class.json"
+cp "${PILTOVER_DIR}/target/dev/piltover_appchain.compiled_contract_class.json" "${ARTIFACTS}/appchain_with_test.compiled_contract_class.json"
+
+if ! grep -q "add_messages_hashes_from_appchain" "${ARTIFACTS}/appchain_with_test.contract_class.json"; then
+  echo "ERROR: appchain_with_test was built WITHOUT the messaging_test feature."
+  exit 1
+fi
+
 echo "Setup complete. Run: bin/integration-test"

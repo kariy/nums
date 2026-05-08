@@ -48,9 +48,10 @@ impl KatanaNode {
         Self::start(
             "settlement",
             SETTLEMENT_PORT,
-            SETTLEMENT_CHAIN_ID_STR,
+            Some(SETTLEMENT_CHAIN_ID_STR),
             fork,
             messaging_config_path,
+            None,
         )
         .await
     }
@@ -59,9 +60,34 @@ impl KatanaNode {
         Self::start(
             "appchain",
             APPCHAIN_PORT,
-            APPCHAIN_CHAIN_ID_STR,
+            Some(APPCHAIN_CHAIN_ID_STR),
             false,
             messaging_config_path,
+            None,
+        )
+        .await
+    }
+
+    /// Start the appchain Katana as a `ChainSpec::Rollup` from the supplied
+    /// chain config directory (containing `config.toml` and `genesis.json`,
+    /// produced by `katana init rollup`).
+    ///
+    /// Unlike `start_appchain`, this skips `--dev` (so genesis.json drives
+    /// pre-funded accounts) and skips `--chain-id`/`--messaging` because both
+    /// are derived from the rollup chain spec. The `--dev.*` flags below
+    /// (`no-fee`, `no-account-validation`) are still honored even outside
+    /// `--dev` mode — they configure `DevConfig` independently.
+    ///
+    /// `--dev` is omitted intentionally; passing it with `--chain` makes
+    /// Katana ignore the rollup spec and revert to dev allocations.
+    pub async fn start_appchain_rollup(chain_config_dir: &PathBuf) -> Result<Self> {
+        Self::start(
+            "appchain",
+            APPCHAIN_PORT,
+            None,
+            false,
+            None,
+            Some(chain_config_dir),
         )
         .await
     }
@@ -69,22 +95,32 @@ impl KatanaNode {
     async fn start(
         label: &'static str,
         rpc_port: u16,
-        chain_id: &str,
+        chain_id: Option<&str>,
         fork_mainnet: bool,
         messaging_config_path: Option<&PathBuf>,
+        chain_config_dir: Option<&PathBuf>,
     ) -> Result<Self> {
         let data_dir = tempfile::tempdir().context("create katana data dir")?;
         let bin = Self::binary();
 
         let mut cmd = Command::new(&bin);
-        cmd.arg("--dev")
-            .arg("--dev.no-fee")
-            .arg("--dev.no-account-validation")
-            .arg("--http.port")
+        // `--dev` triggers Katana's auto pre-funded account allocations and
+        // gates the `--dev.*` config flags below. Mutually-exclusive with
+        // `--chain`: when starting a Rollup chain spec we drop both `--dev`
+        // and the `--dev.*` flags (which require `--dev` per clap's
+        // `requires` annotations in DevOptions).
+        if chain_config_dir.is_none() {
+            cmd.arg("--dev")
+                .arg("--dev.no-fee")
+                .arg("--dev.no-account-validation");
+        }
+        cmd.arg("--http.port")
             .arg(rpc_port.to_string())
             .arg("--http.addr")
             .arg("127.0.0.1")
-            .arg("--silent")
+            // NOTE: --silent omitted intentionally so katana_messaging logs
+            // (poll cycles, L1Handler injection, errors) are visible in the
+            // captured log file. Set NUMS_E2E_KATANA_QUIET=1 to re-suppress.
             .arg("--data-dir")
             .arg(data_dir.path())
             .arg("--db.auto-migrate")
@@ -103,20 +139,34 @@ impl KatanaNode {
             // Forking inherits the chain_id from the upstream (SN_MAIN), so
             // we don't pass --chain-id when forking.
             cmd.arg("--fork.provider").arg(CARTRIDGE_MAINNET_RPC);
-        } else {
-            cmd.arg("--chain-id").arg(chain_id);
+        } else if let Some(id) = chain_id {
+            cmd.arg("--chain-id").arg(id);
         }
 
-        if let Some(p) = messaging_config_path {
+        if let Some(dir) = chain_config_dir {
+            // --chain accepts a directory; auto-derives messaging from the
+            // chain spec. Mutually exclusive with --messaging.
+            cmd.arg("--chain").arg(dir);
+        } else if let Some(p) = messaging_config_path {
             cmd.arg("--messaging").arg(p);
         }
 
-        cmd.stdout(Stdio::null())
-            .stderr(Stdio::piped())
+        // Capture both stdout and stderr to a per-node log file under the
+        // data dir. Path is logged so a failing test points at exactly which
+        // file to inspect (especially useful for diagnosing the messaging
+        // service activity in --chain mode).
+        let log_path = data_dir.path().join("katana.log");
+        let log_file = std::fs::File::create(&log_path)
+            .context("create katana log file")?;
+        let log_file_clone = log_file.try_clone().context("clone katana log fd")?;
+        cmd.env("RUST_LOG", "info,katana_messaging=trace,messaging=trace")
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(log_file_clone))
             .kill_on_drop(true);
 
         info!(
-            "Starting Katana ({label}) on http://127.0.0.1:{rpc_port} (fork={fork_mainnet})"
+            "Starting Katana ({label}) on http://127.0.0.1:{rpc_port} (fork={fork_mainnet}); log={}",
+            log_path.display()
         );
 
         let child = cmd.spawn().with_context(|| {
@@ -144,14 +194,28 @@ impl KatanaNode {
         loop {
             if let Some(child) = self.child.as_mut() {
                 if let Some(status) = child.try_wait().context("try_wait katana")? {
-                    let mut buf = String::new();
-                    if let Some(err) = child.stderr.take() {
-                        let _ = read_to_string(err, &mut buf).await;
-                    }
+                    // stdout/stderr are redirected to katana.log under data_dir;
+                    // surface the tail of that file in the bail message.
+                    let log_path = self.data_dir.path().join("katana.log");
+                    let log_tail = std::fs::read_to_string(&log_path)
+                        .ok()
+                        .map(|s| {
+                            s.lines()
+                                .rev()
+                                .take(40)
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                                .rev()
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        })
+                        .unwrap_or_else(|| "(log file unavailable)".to_string());
                     bail!(
-                        "katana ({}) exited early with {:?}\nstderr:\n{buf}",
+                        "katana ({}) exited early with {:?}\nlog={}\ntail:\n{}",
                         self.label,
                         status,
+                        log_path.display(),
+                        log_tail,
                     );
                 }
             }
@@ -192,6 +256,18 @@ impl Drop for KatanaNode {
         if let Some(mut child) = self.child.take() {
             warn!("Killing Katana ({}) on drop", self.label);
             let _ = child.start_kill();
+        }
+        // Stash the katana log under /tmp before tempfile cleans the data dir
+        // so post-mortem grep is possible. Best-effort; failures are silent.
+        let log_src = self.data_dir.path().join("katana.log");
+        if log_src.exists() {
+            let log_dst = std::env::temp_dir()
+                .join(format!("nums_e2e_{}.katana.log", self.label));
+            if let Err(e) = std::fs::copy(&log_src, &log_dst) {
+                warn!("failed to stash katana log to {}: {e}", log_dst.display());
+            } else {
+                warn!("Stashed katana ({}) log → {}", self.label, log_dst.display());
+            }
         }
     }
 }

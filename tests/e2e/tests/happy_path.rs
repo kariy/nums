@@ -148,13 +148,18 @@ async fn happy_path_paid_bundle() -> Result<()> {
     Ok(())
 }
 
-/// The "real" bridge flow: appchain Setup.issue → BridgeComponent dispatch →
-/// L2->L1 syscall → settlement Settler.settle. Currently unreachable on
-/// `--dev` Katanas; documented in this file's module-level comments. Kept
-/// as `#[ignore]` so a future engineer can flip a Katana rollup mode and
-/// run this end-to-end.
+/// The full bridge round-trip: appchain Setup.issue → BridgeComponent dispatch →
+/// `send_message_to_l1_syscall` → Katana state-root commit (mocked via the
+/// `messaging_test` back-door) → settlement Settler.settle (consume + swap-
+/// branch + vault.pay + team transfer) → reverse `send_message_to_appchain`
+/// → Katana auto-poll → L1Handler tx → Materializer → Setup.materialize_pending
+/// → play.create → PurchaseSettled event observed on the appchain.
+///
+/// Runs against the rollup chain spec generated at startup by `katana init
+/// rollup`, with the auto-deployed Piltover Appchain contract upgraded to
+/// the `messaging_test`-feature class for the appchain→settlement back-door.
+/// ~10 minutes wall-clock end-to-end (sozo migrate dominates).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "Setup.issue path needs is_l3=true Katana (rollup chain spec); see module docs"]
 async fn happy_path_paid_bundle_via_setup_issue() -> Result<()> {
     let env = TestEnv::start().await?;
     env.assert_infrastructure_ready().await?;
@@ -162,7 +167,7 @@ async fn happy_path_paid_bundle_via_setup_issue() -> Result<()> {
     let purchase = env.player_buy_bundle(player.address(), 1, 1).await?;
     env.update_state_for_pending_messages(&purchase).await?;
     env.run_keeper(&purchase).await?;
-    env.wait_for_materialization(purchase.message_id, 60).await?;
+    env.wait_for_materialization(purchase.message_id, 300).await?;
     Ok(())
 }
 
